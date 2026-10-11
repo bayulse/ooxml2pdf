@@ -338,14 +338,6 @@ fn unsupported_shapes_text_styles_and_groups_produce_warnings() {
         ),
         (base.replace("<a:xfrm>", "<a:xfrm flipH='1'>"), "flipH", 0),
         (
-            base.replace(
-                "</p:sp>",
-                "<p:txBody><a:p><a:r><a:t>Not rendered</a:t></a:r></a:p></p:txBody></p:sp>",
-            ),
-            "txBody",
-            1,
-        ),
-        (
             base.replace("</p:sp>", "<p:style><a:fillRef idx='1'/></p:style></p:sp>"),
             "style",
             1,

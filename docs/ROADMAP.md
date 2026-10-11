@@ -142,6 +142,35 @@ PPTX text, SVG, advanced cropping/effects, groups, themes, masters, layouts,
 gradients, charts, SmartArt and animation remain deferred. DOCX, XLSX and Flutter
 remain outside this milestone. See ARCHITECTURE.md for exact limits and decisions.
 
+## Milestone 1F — Basic text boxes (complete)
+
+- Parse common shape text bodies into owned text boxes, ordered paragraphs and
+  literal Unicode runs with direct size, bold, italic and sRGB color.
+- Preserve shape transforms, existing fills/outlines, and text/image/vector z-order.
+- Lay out explicit paragraph/line breaks with fixed spacing and left/center/right
+  horizontal alignment; use direct insets/local paragraph defaults when present.
+- Document and warn about unresolved inheritance (18pt regular black sans-serif),
+  unsupported text features and box overflow. No wrapping or autofit is added.
+- Extend generic core font choices and fixed metrics without changing TextOp fields.
+- Extend the private PDF adapter to WinAnsi Unicode and four standard Helvetica
+  faces. The CLI reporting API replaces missing glyphs with `?` and warns;
+  “Résumé” renders directly, while “日本語” deterministically becomes “???”.
+- Preserve the strict PDF render API and previous inspection, metadata, blank-page,
+  shape and image behavior. No dependency changes or runtime services.
+- Add eight reproducible fixtures plus parser, layout, PDF/Unicode/font, z-order
+  and end-to-end CLI tests; visually inspect text with vector/raster content.
+
+```sh
+cargo run -p o2p-cli -- convert fixtures/pptx/text-with-image.pptx -o target/text-with-image.pdf
+```
+
+Later typography work (Milestone 1G and beyond) may add better wrapping, shaping,
+font coverage/resolution and inheritance. Font discovery, substitution tables,
+embedded/theme fonts, master/layout inheritance, autofit, vertical/rotated text,
+bullets/numbering, spacing/kerning controls, superscripts/underline/strikes, complex
+effects, groups, charts and SmartArt remain deferred. DOCX, XLSX and Flutter remain
+outside the implemented scope. See ARCHITECTURE.md for precise contracts.
+
 ## Validation
 
 ```sh

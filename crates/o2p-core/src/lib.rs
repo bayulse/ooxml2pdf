@@ -4,6 +4,8 @@
 //! x increasing rightward and y increasing downward. Operations paint in order.
 //! This crate performs no layout, font discovery, shaping, or file I/O.
 
+mod text;
+
 /// A position in points. Negative coordinates are allowed.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct Point {
@@ -44,11 +46,13 @@ impl Color {
 
 /// A logical font choice, independent of a backend's font types.
 ///
-/// Milestone 0 provides one regular sans-serif face. Font embedding and shaping
-/// will require an explicit extension to this model.
+/// Fixed fallback faces; font discovery, embedding and shaping are deferred.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Font {
     SansSerif,
+    SansSerifBold,
+    SansSerifItalic,
+    SansSerifBoldItalic,
 }
 
 /// One positioned text run; `origin` is the left end of its baseline.

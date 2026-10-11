@@ -2,7 +2,7 @@ use std::{env, ffi::OsString, fs, path::PathBuf, process::ExitCode};
 
 use o2p_core::{Color, DisplayList, DrawOp, Font, LineOp, Page, Point, Rect, RectOp, Size, TextOp};
 
-const USAGE: &str = "Usage: o2p demo <output.pdf>\n       o2p inspect <file.pptx>\n       o2p convert <input.pptx> -o <output.pdf>\n       o2p --help\n\nPPTX conversion supports solid backgrounds, rectangles, ellipses, straight lines and embedded PNG/JPEG pictures; empty slides produce blank pages.";
+const USAGE: &str = "Usage: o2p demo <output.pdf>\n       o2p inspect <file.pptx>\n       o2p convert <input.pptx> -o <output.pdf>\n       o2p --help\n\nPPTX conversion supports solid backgrounds, rectangles, ellipses, straight lines embedded PNG/JPEG pictures and basic text; empty slides produce blank pages.";
 
 enum Command {
     Demo(PathBuf),
@@ -108,16 +108,19 @@ fn main() -> ExitCode {
                     return ExitCode::FAILURE;
                 }
             };
-            let bytes = match o2p_pdf::render(&presentation.to_display_list()) {
-                Ok(bytes) => bytes,
+            let report = match o2p_pdf::render_with_report(&presentation.to_display_list()) {
+                Ok(report) => report,
                 Err(error) => {
                     eprintln!("PDF rendering failed: {error}");
                     return ExitCode::FAILURE;
                 }
             };
-            if let Err(error) = fs::write(&output, bytes) {
+            if let Err(error) = fs::write(&output, &report.bytes) {
                 eprintln!("Cannot write {}: {error}", output.display());
                 return ExitCode::FAILURE;
+            }
+            for warning in &report.warnings {
+                eprintln!("Warning: {warning}");
             }
             for warning in presentation.warnings() {
                 eprintln!("Warning: {warning}");

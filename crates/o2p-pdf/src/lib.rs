@@ -1,10 +1,11 @@
 //! Deterministic PDF rendering of a format-independent display list.
 //!
 //! The public API contains only standard-library and `o2p-core` types.
-//! Milestone 0 maps the logical sans-serif face to PDF's standard Helvetica and
-//! accepts printable ASCII only. No system fonts or external processes are used.
+//! Fixed standard Helvetica faces support WinAnsi Unicode. The reporting API
+//! substitutes missing glyphs explicitly. No system fonts or processes are used.
 
 mod raster;
+mod text;
 
 use std::{collections::BTreeMap, error::Error, fmt, sync::Arc};
 
@@ -54,7 +55,7 @@ impl fmt::Display for PdfError {
                 character,
             } => write!(
                 f,
-                "unsupported character {character:?} on page {page}, operation {op}; only printable ASCII is supported"
+                "unsupported character {character:?} on page {page}, operation {op}; the fixed fallback cannot encode this character"
             ),
         }
     }
@@ -81,13 +82,48 @@ impl Error for PdfError {}
 /// assert!(bytes.starts_with(b"%PDF-1.7"));
 /// # Ok::<(), o2p_pdf::PdfError>(())
 /// ```
+/// Strict rendering preserves the original error policy for missing glyphs.
 pub fn render(display_list: &DisplayList) -> Result<Vec<u8>, PdfError> {
-    validate(display_list)?;
+    Ok(render_internal(display_list, false)?.bytes)
+}
+
+/// A deterministic compatibility warning from the fixed font adapter.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct PdfWarning {
+    pub page: usize,
+    pub op: usize,
+    /// Distinct unsupported characters in first occurrence order; rendered as `?`.
+    pub missing_glyphs: Vec<char>,
+}
+
+impl fmt::Display for PdfWarning {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(
+            f,
+            "page {}, operation {}: fixed sans-serif fallback has no glyphs for {:?}; rendered as '?'",
+            self.page, self.op, self.missing_glyphs
+        )
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct PdfReport {
+    pub bytes: Vec<u8>,
+    pub warnings: Vec<PdfWarning>,
+}
+
+/// Render Unicode safely using WinAnsi and `?` for missing glyphs, with warnings.
+/// Control characters remain errors; callers must lay out line breaks separately.
+pub fn render_with_report(display_list: &DisplayList) -> Result<PdfReport, PdfError> {
+    render_internal(display_list, true)
+}
+
+fn render_internal(display_list: &DisplayList, fallback: bool) -> Result<PdfReport, PdfError> {
+    let warnings = validate(display_list, fallback)?;
 
     let catalog = Ref::new(1);
     let pages = Ref::new(2);
     let font = Ref::new(3);
-    let font_name = Name(b"F1");
     let mut pdf = Pdf::new();
     pdf.catalog(catalog).pages(pages);
     // Validation ensures these object numbers and counts fit into i32.
@@ -97,12 +133,29 @@ pub fn render(display_list: &DisplayList) -> Result<Vec<u8>, PdfError> {
     pdf.pages(pages)
         .kids(page_ids.iter().copied())
         .count(page_ids.len() as i32);
-    pdf.type1_font(font).base_font(Name(b"Helvetica"));
+    let extra_start = 4 + display_list.pages.len() as i32 * 2;
+    let fonts = [
+        font,
+        Ref::new(extra_start),
+        Ref::new(extra_start + 1),
+        Ref::new(extra_start + 2),
+    ];
+    for face in [
+        Font::SansSerif,
+        Font::SansSerifBold,
+        Font::SansSerifItalic,
+        Font::SansSerifBoldItalic,
+    ] {
+        let (_, base, index) = text::face(face);
+        pdf.type1_font(fonts[index])
+            .base_font(Name(base))
+            .encoding_predefined(Name(b"WinAnsiEncoding"));
+    }
 
     // Pointer identity preserves shared resources without hashing/copying large bytes.
     // Each decoder's pixel buffers are released immediately after its XObject is written.
     let mut images = BTreeMap::new();
-    let mut next_object = 4 + display_list.pages.len() as i32 * 2;
+    let mut next_object = extra_start + 3;
     for (page_index, page) in display_list.pages.iter().enumerate() {
         for (op_index, op) in page.ops.iter().enumerate() {
             if let DrawOp::Image(image) = op {
@@ -137,7 +190,18 @@ pub fn render(display_list: &DisplayList) -> Result<Vec<u8>, PdfError> {
         pdf_page.contents(stream_id);
         {
             let mut resources = pdf_page.resources();
-            resources.fonts().pair(font_name, font);
+            {
+                let mut resource_fonts = resources.fonts();
+                for face in [
+                    Font::SansSerif,
+                    Font::SansSerifBold,
+                    Font::SansSerifItalic,
+                    Font::SansSerifBoldItalic,
+                ] {
+                    let (name, _, index) = text::face(face);
+                    resource_fonts.pair(name, fonts[index]);
+                }
+            }
             if page.ops.iter().any(|op| matches!(op, DrawOp::Image(_))) {
                 let mut xobjects = resources.x_objects();
                 let mut used = std::collections::BTreeSet::new();
@@ -171,7 +235,7 @@ pub fn render(display_list: &DisplayList) -> Result<Vec<u8>, PdfError> {
                     content.x_object(Name(name.as_bytes()));
                 }
                 DrawOp::Text(text) => {
-                    let Font::SansSerif = text.font;
+                    let (font_name, _, _) = text::face(text.font);
                     fill_color(&mut content, text.color);
                     content.begin_text();
                     content.set_font(font_name, text.font_size);
@@ -183,7 +247,12 @@ pub fn render(display_list: &DisplayList) -> Result<Vec<u8>, PdfError> {
                         text.origin.x,
                         page.size.height - text.origin.y,
                     ]);
-                    content.show(Str(text.text.as_bytes()));
+                    let encoded: Vec<_> = text
+                        .text
+                        .chars()
+                        .map(|c| text::encode(c).unwrap_or(b'?'))
+                        .collect();
+                    content.show(Str(&encoded));
                     content.end_text();
                 }
                 DrawOp::Rect(rect) => {
@@ -233,7 +302,10 @@ pub fn render(display_list: &DisplayList) -> Result<Vec<u8>, PdfError> {
         }
         pdf.stream(stream_id, &content.finish());
     }
-    Ok(pdf.finish())
+    Ok(PdfReport {
+        bytes: pdf.finish(),
+        warnings,
+    })
 }
 
 fn rgb(color: Color) -> [f32; 3] {
@@ -293,11 +365,12 @@ fn fill_color(content: &mut Content, color: Color) {
     content.set_fill_rgb(r, g, b);
 }
 
-fn validate(display_list: &DisplayList) -> Result<(), PdfError> {
+fn validate(display_list: &DisplayList, fallback: bool) -> Result<Vec<PdfWarning>, PdfError> {
+    let mut warnings = vec![];
     if display_list.pages.is_empty() {
         return Err(PdfError::EmptyDocument);
     }
-    if display_list.pages.len() > ((i32::MAX - 4) / 2) as usize {
+    if display_list.pages.len() > ((i32::MAX - 7) / 2) as usize {
         return Err(PdfError::TooManyPages);
     }
     for (page_index, page) in display_list.pages.iter().enumerate() {
@@ -337,11 +410,27 @@ fn validate(display_list: &DisplayList) -> Result<(), PdfError> {
                         "text baseline",
                     )?;
                     check(positive(text.font_size), index, "font size")?;
-                    if let Some(character) = text.text.chars().find(|c| !(' '..='~').contains(c)) {
-                        return Err(PdfError::UnsupportedText {
+                    let mut missing_glyphs = vec![];
+                    let mut seen = std::collections::BTreeSet::new();
+                    for character in text.text.chars() {
+                        if text::encode(character).is_none() {
+                            if character.is_control() || !fallback {
+                                return Err(PdfError::UnsupportedText {
+                                    page: page_index,
+                                    op: op_index,
+                                    character,
+                                });
+                            }
+                            if seen.insert(character) {
+                                missing_glyphs.push(character);
+                            }
+                        }
+                    }
+                    if !missing_glyphs.is_empty() {
+                        warnings.push(PdfWarning {
                             page: page_index,
                             op: op_index,
-                            character,
+                            missing_glyphs,
                         });
                     }
                 }
@@ -400,7 +489,7 @@ fn validate(display_list: &DisplayList) -> Result<(), PdfError> {
             }
         }
     }
-    Ok(())
+    Ok(warnings)
 }
 
 fn validate_ellipse(bounds: o2p_core::Rect, page_height: f32) -> Result<(), &'static str> {

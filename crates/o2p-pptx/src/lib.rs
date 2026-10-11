@@ -1,14 +1,16 @@
 //! PresentationML -> normalized presentation and slides -> common DisplayList.
 //!
 //! Metadata-only parsing keeps slides opaque; content parsing supports solid
-//! backgrounds, rectangles, ellipses, straight lines and embedded raster pictures.
+//! backgrounds, rectangles, ellipses, straight lines, embedded raster pictures and basic text.
 //! No PDF commands or external loading occur.
 
 mod model;
 mod slide;
 mod xml;
 
-pub use model::{Fill, Shape, Slide, Stroke};
+pub use model::{
+    Fill, Paragraph, Shape, Slide, Stroke, TextAlignment, TextBox, TextInsets, TextRun, TextStyle,
+};
 
 use std::{collections::BTreeMap, fmt};
 

@@ -379,3 +379,87 @@ fn image_with_shapes_cli_conversion_contains_raster_and_vector_in_order() {
         assert_eq!(bytes, fs::read(&destination).unwrap());
     }
 }
+
+#[test]
+fn text_with_image_conversion_contains_vector_raster_and_readable_unicode_text() {
+    use lopdf::{Document, content::Content};
+    let directory = TestDirectory::new();
+    let destination = directory.0.join("text-with-image.pdf");
+    let output = convert(&fixture("text-with-image.pptx"), &destination);
+    assert!(
+        output.status.success(),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let bytes = fs::read(&destination).unwrap();
+    let pdf = Document::load_mem(&bytes).unwrap();
+    assert_eq!(pdf.get_pages().len(), 1);
+    let extracted = pdf.extract_text(&[1]).unwrap();
+    assert!(extracted.contains("Hello Indonesia — Résumé"));
+    assert!(extracted.contains("Text and image"));
+    let page = pdf.get_pages()[&1];
+    let content = Content::decode(&pdf.get_page_content(page).unwrap()).unwrap();
+    let painted: Vec<_> = content
+        .operations
+        .iter()
+        .filter(|o| matches!(o.operator.as_str(), "f" | "S" | "Do" | "Tj"))
+        .map(|o| o.operator.as_str())
+        .collect();
+    assert_eq!(painted, ["f", "f", "S", "Tj", "Do", "Tj"]);
+    let (resources, _) = pdf.get_page_resources(page).unwrap();
+    let objects = resources
+        .unwrap()
+        .get(b"XObject")
+        .unwrap()
+        .as_dict()
+        .unwrap();
+    assert_eq!(objects.len(), 1);
+    let image = pdf
+        .get_object(objects.iter().next().unwrap().1.as_reference().unwrap())
+        .unwrap()
+        .as_stream()
+        .unwrap();
+    assert_eq!(
+        image.dict.get(b"Subtype").unwrap().as_name().unwrap(),
+        b"Image"
+    );
+    assert!(
+        convert(&fixture("text-with-image.pptx"), &destination)
+            .status
+            .success()
+    );
+    assert_eq!(fs::read(destination).unwrap(), bytes);
+}
+
+#[test]
+fn unicode_fallback_and_text_shape_z_order_are_visible_through_cli() {
+    use lopdf::{Document, content::Content};
+    let directory = TestDirectory::new();
+    let destination = directory.0.join("unicode.pdf");
+    let output = convert(&fixture("unicode-text.pptx"), &destination);
+    assert!(
+        output.status.success(),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    assert!(String::from_utf8_lossy(&output.stderr).contains("rendered as '?'"));
+    let pdf = Document::load(&destination).unwrap();
+    let extracted = pdf.extract_text(&[1]).unwrap();
+    for expected in ["Hello", "Indonesia", "Résumé", "???"] {
+        assert!(extracted.contains(expected));
+    }
+    assert!(
+        convert(&fixture("overlapping-text-shape.pptx"), &destination)
+            .status
+            .success()
+    );
+    let pdf = Document::load(destination).unwrap();
+    let content = Content::decode(&pdf.get_page_content(pdf.get_pages()[&1]).unwrap()).unwrap();
+    let painted: Vec<_> = content
+        .operations
+        .iter()
+        .filter(|o| matches!(o.operator.as_str(), "f" | "Tj"))
+        .map(|o| o.operator.as_str())
+        .collect();
+    assert_eq!(painted, ["Tj", "f", "Tj"]);
+}

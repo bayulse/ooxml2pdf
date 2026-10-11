@@ -415,3 +415,114 @@ pub fn shape_fixtures() -> Vec<(&'static str, Parts)> {
         ("overlapping-shapes.pptx", content_deck("", &overlapping)),
     ]
 }
+
+pub fn text_run(text: &str, properties: &str) -> String {
+    let literal = text
+        .replace('&', "&amp;")
+        .replace('<', "&lt;")
+        .replace('>', "&gt;");
+    format!("<a:r><a:rPr {properties}/><a:t>{literal}</a:t></a:r>")
+}
+
+pub fn text_shape(
+    id: usize,
+    coordinates: (i64, i64, i64, i64),
+    paragraphs: &str,
+    fill: &str,
+    line: &str,
+) -> String {
+    rectangle(id, coordinates, fill, line).replace("</p:sp>", &format!("<p:txBody><a:bodyPr wrap='none'><a:noAutofit/></a:bodyPr><a:lstStyle/>{paragraphs}</p:txBody></p:sp>"))
+}
+
+pub const TEXT_RECT: (i64, i64, i64, i64) = (914_400, 914_400, 4_572_000, 1_828_800);
+
+pub fn text_fixtures() -> Vec<(&'static str, Parts)> {
+    let no_line = "<a:ln><a:noFill/></a:ln>";
+    let paragraph = |text: &str| format!("<a:p>{}</a:p>", text_run(text, "sz='2400'"));
+    let box_deck = |paragraphs: &str| {
+        content_deck(
+            "",
+            &text_shape(2, TEXT_RECT, paragraphs, "<a:noFill/>", no_line),
+        )
+    };
+    let unicode: String = ["Hello", "Indonesia", "Résumé", "日本語"]
+        .iter()
+        .map(|text| paragraph(text))
+        .collect();
+    let runs = format!(
+        "<a:p>{}{}{}</a:p>",
+        text_run("Hello ", "sz='2400'"),
+        text_run("Indonesia ", "sz='1800' b='1'"),
+        text_run("Résumé", "sz='2400' i='1'")
+    );
+    let styled = format!(
+        "<a:p><a:r><a:rPr sz='2800' b='1' i='1'>{}</a:rPr><a:t>Bold italic red</a:t></a:r><a:br/>{}</a:p>",
+        solid("D02030"),
+        text_run("Regular text", "sz='1800' b='0' i='0'")
+    );
+    let rectangle_text = text_shape(
+        2,
+        TEXT_RECT,
+        &paragraph("Text in rectangle"),
+        &solid("CCDDEE"),
+        &outline("2060D0", 25_400),
+    );
+    let image_text = format!(
+        "{}{}{}",
+        text_shape(
+            2,
+            (914_400, 914_400, 5_486_400, 3_048_000),
+            &paragraph("Hello Indonesia — Résumé"),
+            &solid("E1EEFA"),
+            &outline("2060D0", 25_400)
+        ),
+        picture(3, (1_524_000, 2_159_000, 914_400, 914_400)),
+        text_shape(
+            4,
+            (2_743_200, 2_159_000, 3_175_000, 914_400),
+            &paragraph("Text and image"),
+            "<a:noFill/>",
+            no_line
+        )
+    );
+    let overlap = format!(
+        "{}{}{}",
+        text_shape(
+            2,
+            TEXT_RECT,
+            &paragraph("Below rectangle"),
+            "<a:noFill/>",
+            no_line
+        ),
+        rectangle(
+            3,
+            (914_400, 914_400, 3_048_000, 914_400),
+            &solid("F0B020"),
+            no_line
+        ),
+        text_shape(
+            4,
+            TEXT_RECT,
+            &paragraph("Above rectangle"),
+            "<a:noFill/>",
+            no_line
+        )
+    );
+    vec![
+        ("one-text-box.pptx", box_deck(&paragraph("Hello"))),
+        ("unicode-text.pptx", box_deck(&unicode)),
+        ("multiple-runs.pptx", box_deck(&runs)),
+        (
+            "multiple-paragraphs.pptx",
+            box_deck(&format!(
+                "{}<a:p><a:endParaRPr sz='1200'/></a:p>{}",
+                paragraph("First paragraph"),
+                paragraph("Third paragraph")
+            )),
+        ),
+        ("styled-text-basic.pptx", box_deck(&styled)),
+        ("text-in-rectangle.pptx", content_deck("", &rectangle_text)),
+        ("text-with-image.pptx", image_deck(false, &image_text)),
+        ("overlapping-text-shape.pptx", content_deck("", &overlap)),
+    ]
+}

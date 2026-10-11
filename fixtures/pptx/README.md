@@ -115,3 +115,25 @@ All six include explicit white backgrounds, image relationships and tiny embedde
 media parts. Regenerate with `cargo run --offline -p o2p-pptx --example generate_fixtures`.
 Tests verify committed bytes, decoded colors/dimensions, placement and image/shape
 paint order. Existing fixtures remain byte-for-byte unchanged.
+
+## Milestone 1F text fixtures
+
+Regenerate with `cargo run --offline -p o2p-pptx --example generate_fixtures`.
+All text and image content is synthetic and non-proprietary.
+
+| Fixture | Purpose |
+| --- | --- |
+| `one-text-box.pptx` | Positioned single text box containing Hello |
+| `unicode-text.pptx` | Ordered Hello, Indonesia, Résumé, 日本語 paragraphs |
+| `multiple-runs.pptx` | Ordered adjacent runs with differing sizes/styles |
+| `multiple-paragraphs.pptx` | Paragraph breaks and a blank paragraph with end style |
+| `styled-text-basic.pptx` | Direct size, bold, italic, red sRGB and explicit break |
+| `text-in-rectangle.pptx` | Text together with rectangle fill and outline |
+| `text-with-image.pptx` | Readable text, vector paint and original raster quadrants |
+| `overlapping-text-shape.pptx` | Text both underneath and above a rectangle |
+
+The current fixed Helvetica fallback renders Western Unicode including Résumé.
+Japanese glyphs are deliberately rendered as `???` by the CLI with structured
+warnings. Literal Unicode remains in the normalized model; strict PDF `render`
+returns UnsupportedText for glyphs outside WinAnsi. Neither rendering path uses
+system fonts, theme/master/layout resolution, wrapping, autofit or shaping.

@@ -1,11 +1,14 @@
 //! PresentationML/DrawingML semantics, isolated from OPC and PDF rendering.
+#[path = "text.rs"]
+mod text;
 use o2p_core::{Color, ImageFormat, ImageOp, ImageResource, Point, Rect, Size};
 use o2p_ooxml::{OoxmlPackage, RelationshipTarget};
 use roxmltree::Node;
 use std::{collections::BTreeMap, sync::Arc};
 
 use crate::{
-    Fill, ParseLimits, PptxError, PptxWarning, Shape, Slide, SlideRef, Stroke, emu_to_points, xml,
+    Fill, Paragraph, ParseLimits, PptxError, PptxWarning, Shape, Slide, SlideRef, Stroke,
+    TextAlignment, TextBox, TextInsets, TextRun, TextStyle, emu_to_points, xml,
 };
 
 const PML: &str = "http://schemas.openxmlformats.org/presentationml/2006/main";
@@ -100,9 +103,7 @@ pub(super) fn parse(
                                 }
                             }
                             (Some(ns), "sp" | "cxnSp") if ns == pml => {
-                                if let Some(shape) = parser.shape(node)? {
-                                    slide.shapes.push(shape);
-                                }
+                                slide.shapes.extend(parser.shape(node)?);
                             }
                             (Some(ns), "nvGrpSpPr" | "grpSpPr") if ns == pml => {}
                             _ => parser.unsupported(node),
@@ -582,10 +583,11 @@ impl Parser<'_> {
         }
     }
 
-    fn shape(&mut self, node: Node<'_, '_>) -> Result<Option<Shape>, PptxError> {
+    fn shape(&mut self, node: Node<'_, '_>) -> Result<Vec<Shape>, PptxError> {
         self.attributes(node, &[]);
         let pml = self.pml;
         let dml = self.dml;
+        let text_body = self.single(node, pml, "txBody")?;
         // Placeholder geometry may be inherited; never guess it.
         let connector = node.has_tag_name((pml, "cxnSp"));
         let nonvisual_name = if connector { "nvCxnSpPr" } else { "nvSpPr" };
@@ -600,14 +602,23 @@ impl Parser<'_> {
                 .descendants()
                 .any(|child| child.has_tag_name((pml, "ph")))
             {
-                self.warn("placeholder: shape omitted".into());
-                return Ok(None);
+                if text_body.is_none() {
+                    self.warn("placeholder: shape omitted".into());
+                    return Ok(vec![]);
+                }
+                self.warn(
+                    "text placeholder inheritance: using explicit transform and text fallbacks"
+                        .into(),
+                );
             }
         }
-        self.other_children(node, &[(pml, nonvisual_name), (pml, "spPr")]);
+        self.other_children(
+            node,
+            &[(pml, nonvisual_name), (pml, "spPr"), (pml, "txBody")],
+        );
         let Some(properties) = self.single(node, pml, "spPr")? else {
             self.warn("missing shape properties: shape omitted".into());
-            return Ok(None);
+            return Ok(vec![]);
         };
         self.attributes(properties, &[]);
         self.other_children(
@@ -624,37 +635,43 @@ impl Parser<'_> {
                 (dml, "ln"),
             ],
         );
-        let Some(geometry) = self.single(properties, dml, "prstGeom")? else {
-            self.warn("non-preset or inherited geometry: shape omitted".into());
-            return Ok(None);
-        };
-        self.attributes(geometry, &["prst"]);
-        self.element_only(geometry)?;
-        let preset = geometry.attribute("prst").unwrap_or("");
-        if !matches!(preset, "rect" | "ellipse" | "line") || (connector && preset != "line") {
-            self.warn("unsupported preset geometry: shape omitted".into());
-            return Ok(None);
-        }
-        for child in geometry.children().filter(|child| child.is_element()) {
-            if !child.has_tag_name((dml, "avLst"))
-                || child.children().any(|entry| entry.is_element())
-            {
-                self.unsupported(child);
-                return Ok(None);
+        let geometry = self.single(properties, dml, "prstGeom")?;
+        let preset = if let Some(geometry) = geometry {
+            self.attributes(geometry, &["prst"]);
+            self.element_only(geometry)?;
+            let preset = geometry.attribute("prst").unwrap_or("");
+            if !matches!(preset, "rect" | "ellipse" | "line") || (connector && preset != "line") {
+                self.warn("unsupported preset geometry: shape omitted".into());
+                return Ok(vec![]);
             }
-            self.attributes(child, &[]);
-            self.leaf(child)?;
-        }
+            for child in geometry.children().filter(|child| child.is_element()) {
+                if !child.has_tag_name((dml, "avLst"))
+                    || child.children().any(|entry| entry.is_element())
+                {
+                    self.unsupported(child);
+                    return Ok(vec![]);
+                }
+                self.attributes(child, &[]);
+                self.leaf(child)?;
+            }
+            preset
+        } else if text_body.is_some() && self.single(properties, dml, "custGeom")?.is_none() {
+            self.warn("text-only shape: inherited geometry is not resolved".into());
+            "text"
+        } else {
+            self.warn("non-preset or inherited geometry: shape omitted".into());
+            return Ok(vec![]);
+        };
         let Some(transform) = self.single(properties, dml, "xfrm")? else {
             self.warn("inherited transform: shape omitted".into());
-            return Ok(None);
+            return Ok(vec![]);
         };
         self.attributes(transform, &["rot", "flipH", "flipV"]);
         if transform.attribute("rot").is_some()
             && self.integer(transform, "rot", i64::from(i32::MIN), i64::from(i32::MAX))? != 0
         {
             self.warn("rotation: shape omitted".into());
-            return Ok(None);
+            return Ok(vec![]);
         }
         let mut flips = [false; 2];
         for (index, name) in ["flipH", "flipV"].into_iter().enumerate() {
@@ -664,7 +681,7 @@ impl Parser<'_> {
                     "1" | "true" => {
                         if preset != "line" {
                             self.warn(format!("{name}: shape omitted"));
-                            return Ok(None);
+                            return Ok(vec![]);
                         }
                         flips[index] = true;
                     }
@@ -725,7 +742,7 @@ impl Parser<'_> {
             self.warn("inherited outline is not resolved".into());
             None
         };
-        Ok(Some(match preset {
+        let shape = match preset {
             "ellipse" => Shape::Ellipse {
                 bounds: rect,
                 fill,
@@ -746,7 +763,22 @@ impl Parser<'_> {
                 Shape::Line { start, end, stroke }
             }
             _ => Shape::Rectangle { rect, fill, stroke },
-        }))
+        };
+        let mut shapes = vec![];
+        if preset != "text" {
+            shapes.push(shape);
+        }
+        if let Some(body) = text_body {
+            if connector {
+                self.warn("connector text is not rendered".into());
+            } else if let Some(text) = self.text_box(body, rect)? {
+                if text.layout().1 {
+                    self.warn("text box overflow: unwrapped text exceeds the inner box".into());
+                }
+                shapes.push(Shape::TextBox(text));
+            }
+        }
+        Ok(shapes)
     }
 
     fn stroke(&mut self, line: Node<'_, '_>) -> Result<Option<Stroke>, PptxError> {

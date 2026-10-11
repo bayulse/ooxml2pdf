@@ -725,3 +725,133 @@ The CLI test checks raster/vector paint and deterministic output. The existing
 hyperlink warning; its inspection behavior and fixture bytes remain unchanged.
 Text, SVG, advanced cropping/effects, groups, themes, masters, layouts and other
 document formats are not implemented.
+
+# Milestone 1F: Basic text boxes
+
+Baseline: `ddae310` (1E content baseline `c4d19cb`). The pipeline remains:
+
+```text
+PPTX XML -> normalized PPTX TextBox / Paragraph / TextRun / TextStyle
+         -> basic layout -> generic core TextOp -> private PDF text adapter
+```
+
+No dependency changes, system fonts, external runtime processes or services are
+introduced. OPC, picture decoding, vector geometry, metadata-only parsing,
+inspection and blank-page APIs retain their behavior. The standard PDF fallback
+is extended rather than replaced with a font discovery/substitution system.
+
+## Owned model and paint order
+
+`Shape::TextBox(TextBox)` is an additive variant. Existing rectangle, ellipse,
+line and image variants and `TextOp` fields are unchanged. A text-bearing shape
+becomes adjacent entries in `Slide::shapes()`: its existing vector geometry,
+then its text box. This preserves fill -> outline -> text order within a shape
+and XML order between shapes/images. A shape without a preset can contribute
+only text if it has an explicit transform and no custom geometry. Unsupported
+preset/custom geometry is still warned about and omitted as a whole. Explicitly
+positioned text placeholders can render; their unresolved inheritance warns.
+Missing transforms and unsupported shape rotations/flips retain omission behavior.
+
+`TextBox { rect, insets, paragraphs }` preserves the existing shape transform's
+x/y/width/height in points. `TextInsets` has left/right/top/bottom point values;
+`Paragraph { runs, alignment, end_style }` preserves paragraph order, including
+blank paragraphs. `TextRun { text, style }` owns literal Unicode and preserves
+run order. A newline represents an explicit break. `TextStyle` owns font size in
+points, bold/italic booleans and opaque sRGB color. `TextAlignment` has left,
+center and right values. No raw XML, third-party or PDF types escape this model.
+
+## Supported XML and fallbacks
+
+The existing bounded slide XML adapter handles direct `p:sp/p:txBody`, `a:p`,
+`a:r/a:t`, `a:rPr`, `a:br` and `a:endParaRPr` in both namespace families.
+Literal whitespace, entities, CDATA and UTF-8/UTF-16 Unicode are preserved.
+Missing/duplicate supported children, text nested inside `a:t`, stray text in
+structural nodes, bad booleans, out-of-range sizes and malformed colors return
+owned errors. XML controls other than newline (including literal tabs) return
+an owned error: tab stops are not implemented. Existing byte/node/depth, DTD,
+package and slide-count limits apply unchanged. Parsing releases each XML tree.
+
+Direct `rPr/@sz` is hundredths of a point (100–400,000); `b` and `i` accept XML
+boolean spellings. Direct `solidFill/srgbClr` requires six hex digits, without
+transforms. Direct paragraph `pPr/defRPr` supplies local defaults, overridden by
+the run. `endParaRPr` supplies style for blank paragraphs and trailing blank
+lines, and never retroactively styles preceding runs. Direct `pPr/@algn` values
+`l`, `ctr`, `r` are supported. Other alignment values warn and use left alignment.
+
+Unresolved theme/master/layout properties use **18-point regular black sans-serif**,
+left/top alignment and **7.2-point horizontal / 3.6-point vertical insets**.
+Direct `bodyPr` lIns/rIns/tIns/bIns override insets (nonnegative signed-32-bit
+EMUs). Each text box emits a slide-scoped `UnsupportedSlideContent` diagnostic
+for unresolved inheritance/font selection, explicitly identifying the fallbacks.
+Font typefaces and list-level styles remain unsupported and warn where present.
+Unsupported colors use the paragraph/default fallback color with warnings.
+A non-top vertical anchor warns and uses top placement; vertical text/nonzero
+text rotation warns and omits text while preserving independently supported
+vector geometry. Body wrapping/autofit, bullets, numbering, paragraph spacing,
+underlines, strikes, superscripts, character spacing, kerning and other recognized
+style attributes/children warn through the existing structured warning mechanism.
+Unsupported fields are warned about and omitted; no field evaluation occurs.
+
+## Minimal deterministic layout
+
+Layout splits explicit newlines, accumulates runs horizontally, and places
+paragraphs top-to-bottom within the inset rectangle. A line's baseline is its
+top plus the largest run font size, with advance **1.2 × that size**. Empty
+paragraphs/trailing blank lines use their end style. Left/center/right positioning
+uses the combined line advance, not separately aligned runs. Unkerned fixed
+sans-serif metrics live in dependency-free core and share the renderer's fallback
+advances (missing glyphs measure as `?`). There is no wrapping, clipping to the
+text box, shaping, bidi layout, font discovery or PowerPoint autofit.
+
+Layout accumulates in f64, converting positioned operations to core f32 points.
+Parsed sizes/geometry and existing XML limits bound layout arithmetic and work.
+Text exceeding the inner width/height yields a structured `text box overflow`
+warning during parsing. It still paints deterministically with ordinary PDF page
+clipping; it never triggers autofit, truncation or a panic. Text layout is rebuilt
+from the owned model when converting to DisplayList. The PDF renderer sees only
+already-positioned generic runs.
+
+## Generic text and Unicode PDF adapter
+
+Core's existing `TextOp { origin, text, font, font_size, color }` remains source
+compatible. `Font` adds logical bold, italic and bold-italic sans-serif choices.
+PDF maps these to standard Helvetica, Helvetica-Bold, Helvetica-Oblique and
+Helvetica-BoldOblique, using private font resources and WinAnsiEncoding. Printable
+ASCII, Latin-1 including “Résumé”, and Windows-1252 Western punctuation/letters
+are encoded explicitly; UTF-8 bytes are never passed to a Type1 text string.
+Each run retains baseline coordinates, size and color, isolated graphics state,
+paint order and deterministic output. Standard fonts are not embedded, so visual
+font substitution across PDF viewers remains a fidelity limitation.
+
+`o2p_pdf::render` preserves the strict unsupported-character error policy, now
+accepting the larger WinAnsi repertoire. The additive `render_with_report` returns
+`PdfReport { bytes, warnings }`; unsupported non-control Unicode scalars render
+as `?`. `PdfWarning { page, op, missing_glyphs }` lists distinct scalars in first
+occurrence order per operation (zero-based indices). Controls remain errors in
+both APIs. For example **日本語 renders as ???**, with the literal Unicode retained
+in PPTX/core models and a diagnostic naming the missing glyphs. Combining marks,
+CJK, emoji, complex-script shaping and bidi text are not supported. This is a
+bounded fallback policy, not full Unicode font coverage. `o2p convert` uses the
+reporting API and prints both font and PPTX warnings before reporting success.
+
+## Fixtures and validation
+
+Eight original, deterministic synthetic fixtures are regenerated by the existing
+PPTX generator: one-text-box, unicode-text, multiple-runs, multiple-paragraphs,
+styled-text-basic, text-in-rectangle, text-with-image and overlapping-text-shape.
+Tests cover literal extraction, paragraph/run order, size/bold/italic/color,
+geometry/insets, local defaults/end styles, explicit breaks, alignment, overflow,
+malformed markup, style warnings, namespaces/encoding/security limits, text-only
+shapes and text mixed with all existing drawing types. Independent PDF decoding
+checks font choices, WinAnsi bytes, extraction, positions/colors and paint order.
+CLI tests verify readable text alongside vector and raster paint, deterministic
+output, and Japanese fallback diagnostics. Earlier milestone tests remain.
+
+```sh
+cargo run -p o2p-cli -- convert fixtures/pptx/text-with-image.pptx -o target/text-with-image.pdf
+```
+
+The test output is also rasterized with Poppler for visual QA during development;
+Poppler is never a rendering dependency or a runtime engine subprocess. The
+visible result contains a filled/outlined rectangle, the original quadrant image,
+and readable “Hello Indonesia — Résumé” plus “Text and image”.

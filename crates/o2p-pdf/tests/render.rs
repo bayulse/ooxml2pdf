@@ -294,7 +294,7 @@ fn invalid_later_page_reports_its_indices() {
 
 #[test]
 fn unicode_and_controls_are_reported_instead_of_replaced() {
-    for character in ['é', '中', '\n', '\t', '\0', '\u{7f}'] {
+    for character in ['中', '\n', '\t', '\0', '\u{7f}'] {
         let mut display = fixture();
         let DrawOp::Text(text) = &mut display.pages[0].ops[0] else {
             unreachable!()

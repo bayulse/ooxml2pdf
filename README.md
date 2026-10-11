@@ -34,7 +34,9 @@ The workspace contains `o2p-core` (dependency-free drawing model), `o2p-pdf`
 and normalized slide content), and `o2p-cli` (`o2p` executable).
 Processing is pure Rust and needs
 no network access, system fonts, browser, LibreOffice or external executable.
-The initial backend supports printable ASCII in standard Helvetica.
+The backend uses fixed standard Helvetica faces and WinAnsi Unicode. The CLI
+warns and renders unsupported glyphs as `?` (for example Japanese), while
+Western text such as “Résumé” renders directly. Font discovery/shaping is deferred.
 
 Convert a PPTX into PDF pages:
 
@@ -48,8 +50,10 @@ Explicit sRGB solid backgrounds, axis-aligned rectangles and ellipses support
 solid/no fill and simple solid outlines. Straight lines support position, size,
 flipped endpoints, color and width. Embedded PNG/JPEG pictures fill their explicit
 transform rectangles; crop/tile, picture flips/rotation and effects are warned
-about and omitted. Text, themes, inherited styles and other
-features remain unsupported and produce structured warnings on stderr.
+about and omitted. Basic text boxes support direct size, bold, italic, sRGB color, explicit breaks
+and left/center/right alignment. Unresolved text properties use documented
+fallbacks and warnings. Themes, inherited styles and other advanced features
+remain unsupported and produce structured warnings on stderr.
 Missing/invalid slide sizes, malformed referenced slide XML, or slide
 relationships fail before writing output. Existing output files are overwritten
 after successful parsing/rendering; the parent directory must exist.
@@ -72,6 +76,13 @@ Render embedded raster pictures alongside vector shapes:
 cargo run -p o2p-cli -- convert fixtures/pptx/image-with-shapes.pptx -o target/image-with-shapes.pdf
 ```
 
+Render basic Unicode text alongside shapes and images:
+
+```sh
+cargo run -p o2p-cli -- convert fixtures/pptx/text-with-image.pptx -o target/text-with-image.pdf
+```
+
+Text uses deterministic spacing without wrapping or autofit; box overflow warns.
 Malformed supported media fails before writing output. The backend bounds image
 decoding to 16,777,216 pixels, 16,384 pixels per dimension and 128 MiB decoder
 allocation. Resources share encoded bytes; decoded pixels are released per image.
