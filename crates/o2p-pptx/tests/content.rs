@@ -119,7 +119,9 @@ fn solid_background_is_a_full_page_fill_and_is_painted_first() {
 #[test]
 fn nontrivial_position_dimensions_and_srgb_fill_reach_pdf() {
     let model = fixture("filled-rectangle.pptx");
-    let Shape::Rectangle { rect, fill, stroke } = model.slide_contents()[0].shapes()[0];
+    let Shape::Rectangle { rect, fill, stroke } = model.slide_contents()[0].shapes()[0] else {
+        panic!("rectangle expected")
+    };
     assert_eq!(rect, expected_rect());
     assert_eq!(fill, Some(Fill::Solid(Color::rgb(32, 96, 208))));
     assert_eq!(stroke, None);
@@ -151,7 +153,9 @@ fn nontrivial_position_dimensions_and_srgb_fill_reach_pdf() {
 #[test]
 fn fill_and_outline_are_independent_and_width_is_converted_from_emus() {
     let model = fixture("outlined-rectangle.pptx");
-    let Shape::Rectangle { fill, stroke, .. } = model.slide_contents()[0].shapes()[0];
+    let Shape::Rectangle { fill, stroke, .. } = model.slide_contents()[0].shapes()[0] else {
+        panic!("rectangle expected")
+    };
     assert_eq!(fill, Some(Fill::Solid(Color::rgb(204, 221, 238))));
     let stroke = stroke.unwrap();
     assert_eq!(stroke.width, 2.5);
@@ -174,7 +178,9 @@ fn fill_and_outline_are_independent_and_width_is_converted_from_emus() {
 #[test]
 fn no_fill_preserves_the_background_under_the_outline() {
     let model = fixture("no-fill-rectangle.pptx");
-    let Shape::Rectangle { fill, stroke, .. } = model.slide_contents()[0].shapes()[0];
+    let Shape::Rectangle { fill, stroke, .. } = model.slide_contents()[0].shapes()[0] else {
+        panic!("rectangle expected")
+    };
     assert_eq!(fill, Some(Fill::None));
     assert!(stroke.is_some());
     let display = model.to_display_list();
@@ -256,7 +262,9 @@ fn slide_order_remains_visibly_distinct_after_content_parsing_and_rendering() {
 #[test]
 fn unsupported_scheme_colors_and_dashes_warn_without_guessing_paint() {
     let model = fixture("unsupported-style.pptx");
-    let Shape::Rectangle { fill, stroke, .. } = model.slide_contents()[0].shapes()[0];
+    let Shape::Rectangle { fill, stroke, .. } = model.slide_contents()[0].shapes()[0] else {
+        panic!("rectangle expected")
+    };
     assert_eq!(fill, None);
     assert_eq!(stroke, None);
     assert!(model.to_display_list().pages[0].ops.is_empty());
@@ -319,8 +327,8 @@ fn unsupported_shapes_text_styles_and_groups_produce_warnings() {
     );
     for (shape, warning, count) in [
         (
-            base.replace("prst='rect'", "prst='ellipse'"),
-            "non-rectangle",
+            base.replace("prst='rect'", "prst='triangle'"),
+            "unsupported preset",
             0,
         ),
         (
@@ -374,7 +382,9 @@ fn explicit_outline_without_width_uses_documented_base_default_with_warning() {
             &format!("<a:ln>{}</a:ln>", solid("000000")),
         ),
     );
-    let Shape::Rectangle { stroke, .. } = model.slide_contents()[0].shapes()[0];
+    let Shape::Rectangle { stroke, .. } = model.slide_contents()[0].shapes()[0] else {
+        panic!("rectangle expected")
+    };
     assert_eq!(stroke.unwrap().width, 0.75);
     assert!(
         model.warnings()[0]

@@ -1,5 +1,8 @@
 //! Owned, normalized slide content and its format-independent drawing adapter.
-use o2p_core::{Color, DrawOp, Page, Point, Rect, RectOp, Size, StrokeRectOp};
+use o2p_core::{
+    Color, DrawOp, EllipseOp, LineOp, Page, Point, Rect, RectOp, Size, StrokeEllipseOp,
+    StrokeRectOp,
+};
 
 /// Explicit paint; absent/unresolved paint is represented by `None` on a shape.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -15,12 +18,22 @@ pub struct Stroke {
     pub width: f32,
 }
 
-/// Only axis-aligned rectangles are supported in this milestone.
+/// Supported explicit geometry in points, without XML or PDF types.
 #[derive(Debug, Clone, PartialEq)]
 pub enum Shape {
     Rectangle {
         rect: Rect,
         fill: Option<Fill>,
+        stroke: Option<Stroke>,
+    },
+    Ellipse {
+        bounds: Rect,
+        fill: Option<Fill>,
+        stroke: Option<Stroke>,
+    },
+    Line {
+        start: Point,
+        end: Point,
         stroke: Option<Stroke>,
     },
 }
@@ -53,7 +66,40 @@ impl Slide {
             }));
         }
         for shape in &self.shapes {
-            let Shape::Rectangle { rect, fill, stroke } = shape;
+            let (rect, fill, stroke) = match shape {
+                Shape::Rectangle { rect, fill, stroke } => (rect, fill, stroke),
+                Shape::Ellipse {
+                    bounds,
+                    fill,
+                    stroke,
+                } => {
+                    if let Some(Fill::Solid(color)) = fill {
+                        ops.push(DrawOp::Ellipse(EllipseOp {
+                            bounds: *bounds,
+                            color: *color,
+                        }));
+                    }
+                    if let Some(stroke) = stroke {
+                        ops.push(DrawOp::StrokeEllipse(StrokeEllipseOp {
+                            bounds: *bounds,
+                            color: stroke.color,
+                            width: stroke.width,
+                        }));
+                    }
+                    continue;
+                }
+                Shape::Line { start, end, stroke } => {
+                    if let Some(stroke) = stroke {
+                        ops.push(DrawOp::Line(LineOp {
+                            start: *start,
+                            end: *end,
+                            color: stroke.color,
+                            width: stroke.width,
+                        }));
+                    }
+                    continue;
+                }
+            };
             if let Some(Fill::Solid(color)) = fill {
                 ops.push(DrawOp::Rect(RectOp {
                     rect: *rect,

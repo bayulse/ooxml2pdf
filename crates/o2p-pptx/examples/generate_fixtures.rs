@@ -11,6 +11,7 @@ fn main() -> std::io::Result<()> {
         .into_iter()
         .chain(support::content_fixtures())
         .chain(support::content_error_fixtures())
+        .chain(support::shape_fixtures())
     {
         fs::write(directory.join(name), support::zip(&parts, true, false))?;
     }

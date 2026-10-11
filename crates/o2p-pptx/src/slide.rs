@@ -78,7 +78,7 @@ pub(super) fn parse(
                 } else {
                     for node in tree.children().filter(|node| node.is_element()) {
                         match (node.tag_name().namespace(), node.tag_name().name()) {
-                            (Some(ns), "sp") if ns == pml => {
+                            (Some(ns), "sp" | "cxnSp") if ns == pml => {
                                 if let Some(shape) = parser.shape(node)? {
                                     slide.shapes.push(shape);
                                 }
@@ -321,16 +321,24 @@ impl Parser<'_> {
         let pml = self.pml;
         let dml = self.dml;
         // Placeholder geometry may be inherited; never guess it.
-        if let Some(nonvisual) = self.single(node, pml, "nvSpPr")? {
+        let connector = node.has_tag_name((pml, "cxnSp"));
+        let nonvisual_name = if connector { "nvCxnSpPr" } else { "nvSpPr" };
+        if let Some(nonvisual) = self.single(node, pml, nonvisual_name)? {
+            if connector {
+                if let Some(properties) = self.single(nonvisual, pml, "cNvCxnSpPr")? {
+                    self.attributes(properties, &[]);
+                    self.other_children(properties, &[]);
+                }
+            }
             if nonvisual
                 .descendants()
                 .any(|child| child.has_tag_name((pml, "ph")))
             {
-                self.warn("placeholder: rectangle omitted".into());
+                self.warn("placeholder: shape omitted".into());
                 return Ok(None);
             }
         }
-        self.other_children(node, &[(pml, "nvSpPr"), (pml, "spPr")]);
+        self.other_children(node, &[(pml, nonvisual_name), (pml, "spPr")]);
         let Some(properties) = self.single(node, pml, "spPr")? else {
             self.warn("missing shape properties: shape omitted".into());
             return Ok(None);
@@ -356,8 +364,9 @@ impl Parser<'_> {
         };
         self.attributes(geometry, &["prst"]);
         self.element_only(geometry)?;
-        if geometry.attribute("prst") != Some("rect") {
-            self.warn("non-rectangle geometry: shape omitted".into());
+        let preset = geometry.attribute("prst").unwrap_or("");
+        if !matches!(preset, "rect" | "ellipse" | "line") || (connector && preset != "line") {
+            self.warn("unsupported preset geometry: shape omitted".into());
             return Ok(None);
         }
         for child in geometry.children().filter(|child| child.is_element()) {
@@ -371,23 +380,27 @@ impl Parser<'_> {
             self.leaf(child)?;
         }
         let Some(transform) = self.single(properties, dml, "xfrm")? else {
-            self.warn("inherited transform: rectangle omitted".into());
+            self.warn("inherited transform: shape omitted".into());
             return Ok(None);
         };
         self.attributes(transform, &["rot", "flipH", "flipV"]);
         if transform.attribute("rot").is_some()
             && self.integer(transform, "rot", i64::from(i32::MIN), i64::from(i32::MAX))? != 0
         {
-            self.warn("rotation: rectangle omitted".into());
+            self.warn("rotation: shape omitted".into());
             return Ok(None);
         }
-        for name in ["flipH", "flipV"] {
+        let mut flips = [false; 2];
+        for (index, name) in ["flipH", "flipV"].into_iter().enumerate() {
             if let Some(value) = transform.attribute(name) {
                 match value {
                     "0" | "false" => {}
                     "1" | "true" => {
-                        self.warn(format!("{name}: rectangle omitted"));
-                        return Ok(None);
+                        if preset != "line" {
+                            self.warn(format!("{name}: shape omitted"));
+                            return Ok(None);
+                        }
+                        flips[index] = true;
                     }
                     _ => return Err(self.invalid(format!("invalid boolean {name}"))),
                 }
@@ -424,14 +437,50 @@ impl Parser<'_> {
                 height: emu_to_points(self.integer(extent, "cy", 0, 27_273_042_316_900)?),
             },
         };
-        let fill = self.fill(properties)?;
+        let fill = if preset == "line" {
+            // An open line has no interior. Still diagnose explicit unsupported paint.
+            if properties.children().any(|child| {
+                child.is_element()
+                    && child.tag_name().namespace() == Some(dml)
+                    && matches!(
+                        child.tag_name().name(),
+                        "solidFill" | "noFill" | "gradFill" | "blipFill" | "pattFill" | "grpFill"
+                    )
+            }) {
+                self.fill(properties)?;
+            }
+            None
+        } else {
+            self.fill(properties)?
+        };
         let stroke = if let Some(line) = self.single(properties, dml, "ln")? {
             self.stroke(line)?
         } else {
             self.warn("inherited outline is not resolved".into());
             None
         };
-        Ok(Some(Shape::Rectangle { rect, fill, stroke }))
+        Ok(Some(match preset {
+            "ellipse" => Shape::Ellipse {
+                bounds: rect,
+                fill,
+                stroke,
+            },
+            "line" => {
+                let mut start = rect.origin;
+                let mut end = Point {
+                    x: start.x + rect.size.width,
+                    y: start.y + rect.size.height,
+                };
+                if flips[0] {
+                    std::mem::swap(&mut start.x, &mut end.x);
+                }
+                if flips[1] {
+                    std::mem::swap(&mut start.y, &mut end.y);
+                }
+                Shape::Line { start, end, stroke }
+            }
+            _ => Shape::Rectangle { rect, fill, stroke },
+        }))
     }
 
     fn stroke(&mut self, line: Node<'_, '_>) -> Result<Option<Stroke>, PptxError> {

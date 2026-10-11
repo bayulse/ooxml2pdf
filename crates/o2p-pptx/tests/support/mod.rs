@@ -218,3 +218,88 @@ pub fn content_error_fixtures() -> Vec<(&'static str, Parts)> {
         ("deep-slide.pptx", deep),
     ]
 }
+
+pub fn ellipse(id: usize, coordinates: (i64, i64, i64, i64), fill: &str, line: &str) -> String {
+    rectangle(id, coordinates, fill, line)
+        .replace("prst='rect'", "prst='ellipse'")
+        .replace("Rectangle", "Ellipse")
+}
+
+pub fn straight_line(id: usize, coordinates: (i64, i64, i64, i64), line: &str) -> String {
+    rectangle(id, coordinates, "", line)
+        .replace("prst='rect'", "prst='line'")
+        .replace("Rectangle", "Line")
+        .replace("p:sp>", "p:cxnSp>")
+        .replace("nvSpPr", "nvCxnSpPr")
+        .replace("cNvSpPr", "cNvCxnSpPr")
+}
+
+pub fn outline(color: &str, width: i64) -> String {
+    format!("<a:ln w='{width}'>{}</a:ln>", solid(color))
+}
+
+pub fn shape_fixtures() -> Vec<(&'static str, Parts)> {
+    let no_line = "<a:ln><a:noFill/></a:ln>";
+    let ellipse_box = (914_400, 914_400, 2_743_200, 1_828_800);
+    let basic = ellipse(2, ellipse_box, &solid("209060"), no_line);
+    let filled = ellipse(2, NONTRIVIAL_RECT, &solid("209060"), no_line);
+    let outlined = ellipse(2, ellipse_box, &solid("CCDDEE"), &outline("D02030", 31_750));
+    let no_fill = ellipse(2, ellipse_box, "<a:noFill/>", &outline("209060", 25_400));
+    let line = straight_line(
+        2,
+        (914_400, 914_400, 3_657_600, 1_828_800),
+        &outline("D02030", 12_700),
+    );
+    let thick = straight_line(
+        2,
+        (914_400, 914_400, 3_657_600, 0),
+        &outline("3060D0", 101_600),
+    );
+    let rect = rectangle(
+        2,
+        (914_400, 914_400, 2_743_200, 1_828_800),
+        &solid("3060D0"),
+        no_line,
+    );
+    let mixed = format!(
+        "{rect}{}{}",
+        ellipse(
+            3,
+            (4_572_000, 914_400, 2_743_200, 1_828_800),
+            &solid("209060"),
+            &outline("204030", 25_400)
+        ),
+        straight_line(
+            4,
+            (914_400, 3_657_600, 6_400_800, 914_400),
+            &outline("D02030", 63_500)
+        )
+    );
+    let overlapping = format!(
+        "{rect}{}{}",
+        ellipse(
+            3,
+            (1_371_600, 1_371_600, 2_743_200, 1_828_800),
+            &solid("209060"),
+            no_line
+        ),
+        straight_line(
+            4,
+            (914_400, 1_828_800, 3_657_600, 0),
+            &outline("D02030", 101_600)
+        )
+    );
+    vec![
+        ("one-ellipse.pptx", content_deck("", &basic)),
+        ("filled-ellipse.pptx", content_deck("", &filled)),
+        ("outlined-ellipse.pptx", content_deck("", &outlined)),
+        (
+            "no-fill-ellipse.pptx",
+            content_deck(&background("CCDDEE"), &no_fill),
+        ),
+        ("one-line.pptx", content_deck("", &line)),
+        ("thick-line.pptx", content_deck("", &thick)),
+        ("mixed-shapes.pptx", content_deck("", &mixed)),
+        ("overlapping-shapes.pptx", content_deck("", &overlapping)),
+    ]
+}

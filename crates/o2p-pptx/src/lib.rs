@@ -1,7 +1,7 @@
 //! PresentationML -> normalized presentation and slides -> common DisplayList.
 //!
 //! Metadata-only parsing keeps slides opaque; content parsing supports solid
-//! backgrounds and rectangles. No PDF commands or external loading occur.
+//! backgrounds, rectangles, ellipses and straight lines. No PDF commands or external loading occur.
 
 mod model;
 mod slide;

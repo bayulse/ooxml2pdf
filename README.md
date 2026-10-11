@@ -6,7 +6,8 @@ Milestone 0 renders a format-independent DisplayList containing text, filled
 rectangles and lines into a PDF. Milestone 1A opens and inspects PPTX packages;
 Milestone 1B converts PPTX metadata into blank PDF pages with the presentation's
 real dimensions and slide order. Milestone 1C renders explicit solid slide
-backgrounds and rectangles with solid fills or basic outlines.
+backgrounds and rectangles with solid fills or basic outlines. Milestone 1D adds
+ellipses and straight lines with explicit solid strokes.
 
 Generate the deterministic demo:
 
@@ -42,8 +43,9 @@ cargo run -p o2p-cli -- convert fixtures/pptx/three-slides-16x9.pptx -o target/t
 
 Each referenced slide produces one page in presentation order; this example
 creates three 960 × 540 point pages. Slide filenames do not determine order.
-Explicit sRGB solid backgrounds and axis-aligned rectangles support solid/no
-fill and simple solid outlines. Text, images, themes, inherited styles and other
+Explicit sRGB solid backgrounds, axis-aligned rectangles and ellipses support
+solid/no fill and simple solid outlines. Straight lines support position, size,
+flipped endpoints, color and width. Text, images, themes, inherited styles and other
 features remain unsupported and produce structured warnings on stderr.
 Missing/invalid slide sizes, malformed referenced slide XML, or slide
 relationships fail before writing output. Existing output files are overwritten
@@ -53,6 +55,12 @@ Render the synthetic filled-rectangle example:
 
 ```sh
 cargo run -p o2p-cli -- convert fixtures/pptx/filled-rectangle.pptx -o target/filled-rectangle.pdf
+```
+
+Render all three supported shapes:
+
+```sh
+cargo run -p o2p-cli -- convert fixtures/pptx/mixed-shapes.pptx -o target/mixed-shapes.pdf
 ```
 
 ```sh

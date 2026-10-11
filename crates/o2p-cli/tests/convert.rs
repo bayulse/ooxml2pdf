@@ -247,3 +247,87 @@ fn conversion_accepts_non_utf8_os_paths() {
     assert!(convert(&input, &output).status.success());
     assert_eq!(lopdf::Document::load(&output).unwrap().get_pages().len(), 1);
 }
+
+#[test]
+fn convert_mixed_shapes_renders_rectangle_ellipse_and_line_in_order() {
+    let directory = TestDirectory::new();
+    let destination = directory.0.join("mixed-shapes.pdf");
+    let output = convert(&fixture("mixed-shapes.pptx"), &destination);
+    assert!(
+        output.status.success(),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    assert!(output.stderr.is_empty());
+    assert!(String::from_utf8_lossy(&output.stdout).contains("1 pages"));
+    let bytes = fs::read(&destination).unwrap();
+    let pdf = lopdf::Document::load_mem(&bytes).unwrap();
+    assert_eq!(pdf.get_pages().len(), 1);
+    let content =
+        lopdf::content::Content::decode(&pdf.get_page_content(pdf.get_pages()[&1]).unwrap())
+            .unwrap();
+    assert_eq!(
+        content
+            .operations
+            .iter()
+            .filter(|op| op.operator == "re")
+            .count(),
+        1
+    );
+    assert_eq!(
+        content
+            .operations
+            .iter()
+            .filter(|op| op.operator == "c")
+            .count(),
+        8
+    );
+    assert_eq!(
+        content
+            .operations
+            .iter()
+            .filter(|op| op.operator == "l")
+            .count(),
+        1
+    );
+    let paints: Vec<_> = content
+        .operations
+        .iter()
+        .map(|op| op.operator.as_str())
+        .filter(|op| matches!(*op, "f" | "S"))
+        .collect();
+    assert_eq!(paints, ["f", "f", "S", "S"]);
+    let line_start = content
+        .operations
+        .iter()
+        .rev()
+        .find(|op| op.operator == "m")
+        .unwrap();
+    let line_end = content
+        .operations
+        .iter()
+        .find(|op| op.operator == "l")
+        .unwrap();
+    assert_eq!(
+        line_start
+            .operands
+            .iter()
+            .map(|v| v.as_float().unwrap())
+            .collect::<Vec<_>>(),
+        [72.0, 252.0]
+    );
+    assert_eq!(
+        line_end
+            .operands
+            .iter()
+            .map(|v| v.as_float().unwrap())
+            .collect::<Vec<_>>(),
+        [576.0, 180.0]
+    );
+    assert!(
+        convert(&fixture("mixed-shapes.pptx"), &destination)
+            .status
+            .success()
+    );
+    assert_eq!(fs::read(destination).unwrap(), bytes);
+}

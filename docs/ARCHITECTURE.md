@@ -532,3 +532,88 @@ paint order, colors and width. Parser tests cover namespace/encoding variants,
 unsupported features, malformed values and per-slide security limits. CLI tests
 verify visible filled-rectangle commands, warnings, blank-page preservation,
 determinism and failure behavior. Existing metadata/package/demo tests remain.
+
+# Milestone 1D: Ellipses and straight lines
+
+The 1C content pipeline is retained: PPTX XML -> normalized PPTX shapes ->
+format-independent DisplayList -> PDF. OPC mechanics, metadata-only parsing,
+blank-page conversion and rectangle rendering retain their existing behavior.
+No dependency is added. `o2p-pptx` alone interprets presets, transforms and styles;
+`o2p-pdf` receives only generic geometry and paint.
+
+## Minimal model and DrawingML support
+
+The existing `Shape::Rectangle { rect, fill, stroke }` remains unchanged. Two
+variants extend the normalized model:
+
+- `Shape::Ellipse { bounds, fill, stroke }` uses a core `Rect` bounding box,
+  `Option<Fill>` and `Option<Stroke>`, just as rectangles do. The ellipse is
+  inscribed in its box, rather than drawn as a rectangle.
+- `Shape::Line { start, end, stroke }` stores core points and an optional
+  resolved solid stroke. An open line has no interior fill.
+
+Direct `spTree/sp` shapes accept `prstGeom` values `rect`, `ellipse` and `line`.
+Direct `spTree/cxnSp` accepts only `line`; bent/curved connectors are warned
+about and omitted. Nonvisual connector attachment children are warned about;
+attachment relationships are never resolved or used to reroute the explicit
+line. Shape XML order is preserved in the same normalized vector, regardless of
+whether an element is `sp` or `cxnSp`. Both Strict and Transitional namespaces
+work. Geometry still requires an explicit offset and nonnegative extent.
+
+For a line, offset `(x, y)` and extent `(cx, cy)` become start `(x, y)` and end
+`(x + cx, y + cy)` in points. True `flipH` swaps the x coordinates of the
+endpoints; true `flipV` swaps their y coordinates. This applies reflection about
+[the transform bounding box center](https://learn.microsoft.com/en-us/dotnet/api/documentformat.openxml.presentation.transform?view=openxml-3.0.1).
+Both XML boolean spellings are accepted. Horizontal and vertical lines have a
+zero extent on one axis; a zero-length line remains valid. Positions, extents
+and widths all reuse `emu_to_points`; no new conversion helper is introduced.
+Nonzero rotation remains unsupported. Rectangle flips retain 1C's omission
+behavior; ellipse flips are also warned about and omitted.
+
+Ellipses reuse solid/no-fill parsing and simple solid outlines. Lines reuse the
+same outline color, width and supported style subset. Their absent shape fill
+does not warn, because a line has no interior; explicit unsupported fill still
+receives warnings. Scheme/theme colors, transformed colors, dashes, arrows,
+compound/cap/alignment styles, adjusted/custom presets, inherited properties,
+effects and other unsupported content continue to emit slide-scoped
+`UnsupportedSlideContent` warnings. Unsupported paint is omitted without
+substituting a color. Unsupported stroke preserves an independently supported
+ellipse fill. Missing line stroke warns; zero width or explicit stroke `noFill`
+emits no line, avoiding PDF hairlines. The existing 0.75-point omitted-width
+default and its inheritance warning are retained. Malformed supported values
+return errors before output is written.
+
+## Generic primitives and rendering
+
+`LineOp` already provides endpoints, color and positive width; no core line
+change is needed. `EllipseOp { bounds, color }` and
+`StrokeEllipseOp { bounds, color, width }`, with corresponding `DrawOp` variants,
+are the only new core primitives. They express an axis-aligned filled ellipse
+and its centered closed outline, without any PPTX types or preset names.
+
+The PPTX adapter emits an ellipse fill followed by its outline, or one line
+operation. It continues to emit backgrounds first and shapes in XML order. A
+shape with no resolved paint retains its geometry but emits no operations.
+Later shapes therefore cover earlier shapes, including mixed overlapping types.
+
+The PDF backend constructs a closed ellipse from four cubic quarter-arcs,
+using control distance `4 * (sqrt(2) - 1) / 3` times the corresponding radius
+(approximately 0.55228475). Maximum radial approximation error is about 0.028%
+of the radius. Coordinate conversion follows core's top-left convention; curve
+intermediates use `f64` to avoid overflowing during otherwise valid arithmetic.
+Validation checks finite bounding geometry and converted boundaries,
+nonnegative extents and positive finite stroke width. Zero-size ellipses are
+allowed, matching rectangle geometry policy. Every fill/stroke isolates its
+graphics state; output remains deterministic. All path/PDF commands live solely
+in `o2p-pdf`.
+
+The fixture generator now also emits `one-ellipse`, `filled-ellipse`,
+`outlined-ellipse`, `no-fill-ellipse`, `one-line`, `thick-line`, `mixed-shapes` and
+`overlapping-shapes`. Tests exercise geometry, fill/stroke, width/color, signed
+and nontrivial EMUs, flips, degenerate geometry, unsupported styles and malformed
+input. Independent PDF decoding verifies cubic geometry, colors, widths,
+coordinate conversion and overlapping paint order. The CLI mixed-shapes test
+checks visible rectangle/ellipse/line commands and deterministic output. The
+existing package, metadata, blank-page, rectangle, inspect and demo tests remain.
+Text, images, groups, routed connectors, arrows, themes, masters, layouts,
+gradients, transparency and the other deferred formats/features are not added.

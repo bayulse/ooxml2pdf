@@ -80,6 +80,22 @@ pub struct StrokeRectOp {
     pub width: f32,
 }
 
+/// An axis-aligned ellipse inscribed in its bounding rectangle.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct EllipseOp {
+    pub bounds: Rect,
+    pub color: Color,
+}
+
+/// A closed ellipse outline centered on the ellipse boundary.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct StrokeEllipseOp {
+    pub bounds: Rect,
+    pub color: Color,
+    /// Positive width in points.
+    pub width: f32,
+}
+
 /// A solid line with a positive width in points.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct LineOp {
@@ -95,6 +111,8 @@ pub enum DrawOp {
     Text(TextOp),
     Rect(RectOp),
     StrokeRect(StrokeRectOp),
+    Ellipse(EllipseOp),
+    StrokeEllipse(StrokeEllipseOp),
     Line(LineOp),
 }
 

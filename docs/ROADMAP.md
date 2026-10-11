@@ -80,11 +80,37 @@ is intentionally not rendered. Empty slide-reference lists are rejected. See
   parser/security tests, independent PDF operator tests and CLI conversion tests.
 - Reuse all existing dependencies; package/OPC behavior remains unchanged.
 
-Current content scope is deliberately limited to backgrounds and rectangles.
-Text, images, ellipses, lines, groups, themes, masters, layouts, gradients,
-transparency, charts, SmartArt and animations are deferred. Unresolved colors
+At completion of 1C, content scope was limited to backgrounds and rectangles.
+Milestone 1D below adds ellipses and straight lines. Text, images, groups, themes,
+masters, layouts, gradients, transparency, charts, SmartArt and animations remain
+deferred. Unresolved colors
 and styles are warned about rather than guessed. See
 [ARCHITECTURE.md](ARCHITECTURE.md) for the precise behavior and defaults.
+
+## Milestone 1D — Ellipses and straight lines (complete)
+
+- Extend the existing slide parser with `prstGeom` ellipse and line geometry;
+  accept straight lines in both `sp` and `cxnSp` without implementing routing.
+- Add only normalized `Shape::Ellipse` (bounding rectangle, fill, stroke) and
+  `Shape::Line` (start, end, stroke); retain the existing rectangle variant.
+- Reuse centralized EMU conversion, sRGB colors, solid/no fill, and outline
+  parsing, including its width defaults and structured unsupported-style warnings.
+- Convert xfrm offset/extent to line endpoints and apply horizontal/vertical
+  flips; support horizontal, vertical and diagonal lines, signed positions and
+  zero extents. Nonzero rotations remain unsupported and warned about.
+- Reuse core `LineOp`. Add generic `EllipseOp` and `StrokeEllipseOp`, with
+  validated PDF rendering through four closed cubic quarter-arcs.
+- Preserve XML paint order across rectangles, ellipses and lines, with each
+  shape's fill before its outline. Preserve metadata-only and blank-page APIs,
+  inspection, rectangle behavior and deterministic PDF output.
+- Add eight small reproducible fixtures, normalized geometry/paint/order tests,
+  independent PDF operator/validation tests and a mixed-shapes CLI conversion test.
+- Introduce no dependencies and no OPC changes. Text, images, groups, arrows,
+  routed connectors, themes and inherited styles remain unsupported.
+
+```sh
+cargo run -p o2p-cli -- convert fixtures/pptx/mixed-shapes.pptx -o target/mixed-shapes.pdf
+```
 
 Later format support, richer typography, Flutter integration and advanced Office
 features remain future milestones. DOCX and XLSX are not part of current work.

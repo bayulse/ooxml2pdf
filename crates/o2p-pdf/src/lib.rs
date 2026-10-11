@@ -142,6 +142,18 @@ pub fn render(display_list: &DisplayList) -> Result<Vec<u8>, PdfError> {
                     content.line_to(line.end.x, page.size.height - line.end.y);
                     content.stroke();
                 }
+                DrawOp::Ellipse(ellipse) => {
+                    fill_color(&mut content, ellipse.color);
+                    ellipse_path(&mut content, ellipse.bounds, page.size.height);
+                    content.fill_nonzero();
+                }
+                DrawOp::StrokeEllipse(ellipse) => {
+                    let [r, g, b] = rgb(ellipse.color);
+                    content.set_stroke_rgb(r, g, b);
+                    content.set_line_width(ellipse.width);
+                    ellipse_path(&mut content, ellipse.bounds, page.size.height);
+                    content.stroke();
+                }
                 DrawOp::StrokeRect(rect) => {
                     let [r, g, b] = rgb(rect.color);
                     content.set_stroke_rgb(r, g, b);
@@ -164,6 +176,54 @@ pub fn render(display_list: &DisplayList) -> Result<Vec<u8>, PdfError> {
 
 fn rgb(color: Color) -> [f32; 3] {
     [color.red, color.green, color.blue].map(|channel| f32::from(channel) / 255.0)
+}
+
+/// Four cubic quarter-arcs; maximum radial error is about 0.028% of radius.
+fn ellipse_path(content: &mut Content, bounds: o2p_core::Rect, page_height: f32) {
+    // Calculate intermediates in f64 to avoid overflow for valid f32 bounds.
+    let x = f64::from(bounds.origin.x);
+    let y = f64::from(bounds.origin.y);
+    let rx = f64::from(bounds.size.width) / 2.0;
+    let ry = f64::from(bounds.size.height) / 2.0;
+    let cx = x + rx;
+    let cy = y + ry;
+    let k = 0.552_284_749_830_793_6;
+    let px = |v: f64| v as f32;
+    let py = |v: f64| (f64::from(page_height) - v) as f32;
+    content.move_to(px(x + 2.0 * rx), py(cy));
+    content.cubic_to(
+        px(x + 2.0 * rx),
+        py(cy + k * ry),
+        px(cx + k * rx),
+        py(y + 2.0 * ry),
+        px(cx),
+        py(y + 2.0 * ry),
+    );
+    content.cubic_to(
+        px(cx - k * rx),
+        py(y + 2.0 * ry),
+        px(x),
+        py(cy + k * ry),
+        px(x),
+        py(cy),
+    );
+    content.cubic_to(
+        px(x),
+        py(cy - k * ry),
+        px(cx - k * rx),
+        py(y),
+        px(cx),
+        py(y),
+    );
+    content.cubic_to(
+        px(cx + k * rx),
+        py(y),
+        px(x + 2.0 * rx),
+        py(cy - k * ry),
+        px(x + 2.0 * rx),
+        py(cy),
+    );
+    content.close_path();
 }
 
 fn fill_color(content: &mut Content, color: Color) {
@@ -233,6 +293,25 @@ fn validate(display_list: &DisplayList) -> Result<(), PdfError> {
                         }
                     })?;
                 }
+                DrawOp::Ellipse(ellipse) => {
+                    validate_ellipse(ellipse.bounds, page.size.height).map_err(|field| {
+                        PdfError::InvalidGeometry {
+                            page: page_index,
+                            op: index,
+                            field,
+                        }
+                    })?;
+                }
+                DrawOp::StrokeEllipse(ellipse) => {
+                    check(positive(ellipse.width), index, "ellipse outline width")?;
+                    validate_ellipse(ellipse.bounds, page.size.height).map_err(|field| {
+                        PdfError::InvalidGeometry {
+                            page: page_index,
+                            op: index,
+                            field,
+                        }
+                    })?;
+                }
                 DrawOp::Line(line) => {
                     check(
                         finite_point(line.start) && finite_point(line.end),
@@ -249,6 +328,15 @@ fn validate(display_list: &DisplayList) -> Result<(), PdfError> {
                 }
             }
         }
+    }
+    Ok(())
+}
+
+fn validate_ellipse(bounds: o2p_core::Rect, page_height: f32) -> Result<(), &'static str> {
+    validate_rect(bounds, page_height)?;
+    // Unlike a rectangle operator, the curve also emits the top boundary.
+    if !(page_height - bounds.origin.y).is_finite() {
+        return Err("ellipse position");
     }
     Ok(())
 }
