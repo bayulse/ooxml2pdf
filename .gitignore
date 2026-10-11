@@ -13,6 +13,7 @@
 .serena/
 .codex/
 .claude/
+graphify-out/
 
 # Editors
 .idea/
