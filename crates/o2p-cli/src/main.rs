@@ -2,10 +2,12 @@ use std::{env, ffi::OsString, fs, path::PathBuf, process::ExitCode};
 
 use o2p_core::{Color, DisplayList, DrawOp, Font, LineOp, Page, Point, Rect, RectOp, Size, TextOp};
 
-const USAGE: &str = "Usage: o2p demo <output.pdf>\n       o2p --help";
+const USAGE: &str =
+    "Usage: o2p demo <output.pdf>\n       o2p inspect <file.pptx>\n       o2p --help";
 
 enum Command {
     Demo(PathBuf),
+    Inspect(PathBuf),
     Help,
 }
 
@@ -15,6 +17,9 @@ fn parse_args(args: impl IntoIterator<Item = OsString>) -> Result<Command, &'sta
         (Some(command), None, None) if command == "--help" || command == "-h" => Ok(Command::Help),
         (Some(command), Some(path), None) if command == "demo" && !path.is_empty() => {
             Ok(Command::Demo(path.into()))
+        }
+        (Some(command), Some(path), None) if command == "inspect" && !path.is_empty() => {
+            Ok(Command::Inspect(path.into()))
         }
         _ => Err(USAGE),
     }
@@ -73,6 +78,31 @@ fn main() -> ExitCode {
     };
     match command {
         Command::Help => println!("{USAGE}"),
+        Command::Inspect(path) => {
+            let inspection =
+                match o2p_ooxml::OoxmlPackage::open(&path, o2p_ooxml::SecurityLimits::default())
+                    .and_then(|package| package.inspect_pptx())
+                {
+                    Ok(inspection) => inspection,
+                    Err(error) => {
+                        eprintln!("Cannot inspect {}: {error}", path.display());
+                        return ExitCode::FAILURE;
+                    }
+                };
+            println!(
+                "Format: PPTX\nSlides: {}\nMedia: {}",
+                inspection.slide_count(),
+                inspection.media_count()
+            );
+            println!("\nSlides:");
+            for slide in inspection.slides {
+                println!("- {slide}");
+            }
+            println!("\nMedia:");
+            for medium in inspection.media {
+                println!("- {medium}");
+            }
+        }
         Command::Demo(path) => {
             let bytes = match o2p_pdf::render(&demo()) {
                 Ok(bytes) => bytes,
@@ -101,6 +131,10 @@ mod tests {
             matches!(parse_args(["demo".into(), "file.pdf".into()]), Ok(Command::Demo(path)) if path == std::path::Path::new("file.pdf"))
         );
         assert!(matches!(parse_args(["--help".into()]), Ok(Command::Help)));
+        assert!(matches!(
+            parse_args(["inspect".into(), "file.pptx".into()]),
+            Ok(Command::Inspect(_))
+        ));
     }
 
     #[test]
@@ -112,6 +146,9 @@ mod tests {
             vec!["demo", "file.pdf", "extra"],
             vec!["--help", "extra"],
             vec!["demo", ""],
+            vec!["inspect"],
+            vec!["inspect", ""],
+            vec!["inspect", "file.pptx", "extra"],
         ] {
             assert!(parse_args(args.into_iter().map(OsString::from)).is_err());
         }

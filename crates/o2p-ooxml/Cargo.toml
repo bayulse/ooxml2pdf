@@ -1,0 +1,13 @@
+[package]
+name = "o2p-ooxml"
+description = "Bounded offline OOXML / OPC package reader"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+flate2.workspace = true
+crc32fast.workspace = true
+
+[lints]
+workspace = true

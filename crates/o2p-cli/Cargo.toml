@@ -1,6 +1,6 @@
 [package]
 name = "o2p-cli"
-description = "DisplayList to PDF demo for ooxml2pdf"
+description = "PDF demo and OOXML package inspection for ooxml2pdf"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
@@ -12,6 +12,7 @@ path = "src/main.rs"
 [dependencies]
 o2p-core.workspace = true
 o2p-pdf.workspace = true
+o2p-ooxml.workspace = true
 
 [dev-dependencies]
 lopdf.workspace = true

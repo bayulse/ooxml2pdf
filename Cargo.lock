@@ -293,12 +293,21 @@ version = "0.1.0"
 dependencies = [
  "lopdf",
  "o2p-core",
+ "o2p-ooxml",
  "o2p-pdf",
 ]
 
 [[package]]
 name = "o2p-core"
 version = "0.1.0"
+
+[[package]]
+name = "o2p-ooxml"
+version = "0.1.0"
+dependencies = [
+ "crc32fast",
+ "flate2",
+]
 
 [[package]]
 name = "o2p-pdf"
