@@ -96,3 +96,22 @@ The line fixtures use `p:cxnSp` with `a:prstGeom prst="line"`; tests also cover
 lines represented by `p:sp`, flips, zero extents and unsupported connector styles.
 These packages are synthetic regression inputs, not examples of full Office
 feature coverage. Existing fixtures regenerate byte-for-byte unchanged.
+
+## Milestone 1E fixtures
+
+The same Rust generator creates original 2x2 PNG quadrants (red/green/blue/yellow)
+and a 3x2 solid green JPEG. No third-party image assets are used.
+
+| Fixture | Content |
+| --- | --- |
+| `one-png.pptx` | PNG at (72,72), 144x144 points |
+| `one-jpeg.pptx` | JPEG at (72,72), 216x144 points |
+| `positioned-image.pptx` | PNG with fractional-point offsets/extents |
+| `scaled-image.pptx` | PNG mapped to a 288x72-point transform rectangle |
+| `image-with-shapes.pptx` | Blue rectangle, PNG, green ellipse, red line in overlapping paint order |
+| `overlapping-image-shape.pptx` | PNG followed by an overlapping blue rectangle |
+
+All six include explicit white backgrounds, image relationships and tiny embedded
+media parts. Regenerate with `cargo run --offline -p o2p-pptx --example generate_fixtures`.
+Tests verify committed bytes, decoded colors/dimensions, placement and image/shape
+paint order. Existing fixtures remain byte-for-byte unchanged.

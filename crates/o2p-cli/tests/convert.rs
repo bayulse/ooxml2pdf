@@ -51,7 +51,6 @@ fn conversion_preserves_deterministic_blank_pages_with_correct_dimensions() {
         ("three-slides-standard.pptx", 3, 720.0),
         ("three-slides-16x9.pptx", 3, 960.0),
         ("reordered-slides.pptx", 3, 720.0),
-        ("one-image.pptx", 1, 720.0),
     ] {
         let destination = directory.0.join("output with spaces.pdf");
         let output = convert(&fixture(name), &destination);
@@ -62,10 +61,7 @@ fn conversion_preserves_deterministic_blank_pages_with_correct_dimensions() {
         );
         assert!(String::from_utf8_lossy(&output.stdout).contains(&format!("{count} pages")));
         let warnings = String::from_utf8(output.stderr).unwrap();
-        if name == "one-image.pptx" {
-            assert!(warnings.contains("slide relationship"));
-            assert!(warnings.contains("image"));
-        } else {
+        {
             assert_eq!(warnings.matches("clrMapOvr").count(), count);
             if name == "reordered-slides.pptx" {
                 let order: Vec<_> = warnings.lines().collect();
@@ -330,4 +326,56 @@ fn convert_mixed_shapes_renders_rectangle_ellipse_and_line_in_order() {
             .success()
     );
     assert_eq!(fs::read(destination).unwrap(), bytes);
+}
+
+#[test]
+fn image_with_shapes_cli_conversion_contains_raster_and_vector_in_order() {
+    let directory = TestDirectory::new();
+    for name in [
+        "image-with-shapes.pptx",
+        "one-png.pptx",
+        "one-jpeg.pptx",
+        "one-image.pptx",
+    ] {
+        let destination = directory.0.join("image-with-shapes.pdf");
+        let output = convert(&fixture(name), &destination);
+        assert!(
+            output.status.success(),
+            "{}",
+            String::from_utf8_lossy(&output.stderr)
+        );
+        if name != "one-image.pptx" {
+            assert!(output.stderr.is_empty());
+        } else {
+            assert!(String::from_utf8_lossy(&output.stderr).contains("hyperlink"));
+        }
+        let bytes = fs::read(&destination).unwrap();
+        let pdf = lopdf::Document::load_mem(&bytes).unwrap();
+        let content =
+            lopdf::content::Content::decode(&pdf.get_page_content(pdf.get_pages()[&1]).unwrap())
+                .unwrap();
+        assert!(content.operations.iter().any(|op| op.operator == "Do"));
+        assert!(
+            pdf.objects
+                .values()
+                .filter_map(|o| o.as_stream().ok())
+                .any(
+                    |s| s.dict.get(b"Subtype").ok().and_then(|o| o.as_name().ok())
+                        == Some(b"Image".as_slice())
+                )
+        );
+        if name == "image-with-shapes.pptx" {
+            assert_eq!(
+                content
+                    .operations
+                    .iter()
+                    .map(|op| op.operator.as_str())
+                    .filter(|op| matches!(*op, "f" | "S" | "Do"))
+                    .collect::<Vec<_>>(),
+                ["f", "f", "Do", "f", "S"]
+            );
+        }
+        assert!(convert(&fixture(name), &destination).status.success());
+        assert_eq!(bytes, fs::read(&destination).unwrap());
+    }
 }

@@ -8,9 +8,12 @@ rust-version.workspace = true
 [dependencies]
 o2p-core.workspace = true
 pdf-writer.workspace = true
+image.workspace = true
+flate2.workspace = true
 
 [dev-dependencies]
 lopdf.workspace = true
+crc32fast.workspace = true
 
 [lints]
 workspace = true

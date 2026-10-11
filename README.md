@@ -7,7 +7,8 @@ rectangles and lines into a PDF. Milestone 1A opens and inspects PPTX packages;
 Milestone 1B converts PPTX metadata into blank PDF pages with the presentation's
 real dimensions and slide order. Milestone 1C renders explicit solid slide
 backgrounds and rectangles with solid fills or basic outlines. Milestone 1D adds
-ellipses and straight lines with explicit solid strokes.
+ellipses and straight lines with explicit solid strokes. Milestone 1E adds
+embedded PNG/JPEG pictures in slide paint order.
 
 Generate the deterministic demo:
 
@@ -45,7 +46,9 @@ Each referenced slide produces one page in presentation order; this example
 creates three 960 × 540 point pages. Slide filenames do not determine order.
 Explicit sRGB solid backgrounds, axis-aligned rectangles and ellipses support
 solid/no fill and simple solid outlines. Straight lines support position, size,
-flipped endpoints, color and width. Text, images, themes, inherited styles and other
+flipped endpoints, color and width. Embedded PNG/JPEG pictures fill their explicit
+transform rectangles; crop/tile, picture flips/rotation and effects are warned
+about and omitted. Text, themes, inherited styles and other
 features remain unsupported and produce structured warnings on stderr.
 Missing/invalid slide sizes, malformed referenced slide XML, or slide
 relationships fail before writing output. Existing output files are overwritten
@@ -62,6 +65,16 @@ Render all three supported shapes:
 ```sh
 cargo run -p o2p-cli -- convert fixtures/pptx/mixed-shapes.pptx -o target/mixed-shapes.pdf
 ```
+
+Render embedded raster pictures alongside vector shapes:
+
+```sh
+cargo run -p o2p-cli -- convert fixtures/pptx/image-with-shapes.pptx -o target/image-with-shapes.pdf
+```
+
+Malformed supported media fails before writing output. The backend bounds image
+decoding to 16,777,216 pixels, 16,384 pixels per dimension and 128 MiB decoder
+allocation. Resources share encoded bytes; decoded pixels are released per image.
 
 ```sh
 cargo fmt

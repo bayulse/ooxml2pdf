@@ -1,6 +1,6 @@
 //! Owned, normalized slide content and its format-independent drawing adapter.
 use o2p_core::{
-    Color, DrawOp, EllipseOp, LineOp, Page, Point, Rect, RectOp, Size, StrokeEllipseOp,
+    Color, DrawOp, EllipseOp, ImageOp, LineOp, Page, Point, Rect, RectOp, Size, StrokeEllipseOp,
     StrokeRectOp,
 };
 
@@ -21,6 +21,8 @@ pub struct Stroke {
 /// Supported explicit geometry in points, without XML or PDF types.
 #[derive(Debug, Clone, PartialEq)]
 pub enum Shape {
+    /// An embedded raster picture, in the same paint sequence as vector shapes.
+    Image(ImageOp),
     Rectangle {
         rect: Rect,
         fill: Option<Fill>,
@@ -67,6 +69,10 @@ impl Slide {
         }
         for shape in &self.shapes {
             let (rect, fill, stroke) = match shape {
+                Shape::Image(image) => {
+                    ops.push(DrawOp::Image(image.clone()));
+                    continue;
+                }
                 Shape::Rectangle { rect, fill, stroke } => (rect, fill, stroke),
                 Shape::Ellipse {
                     bounds,

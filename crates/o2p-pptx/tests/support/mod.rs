@@ -238,6 +238,118 @@ pub fn outline(color: &str, width: i64) -> String {
     format!("<a:ln w='{width}'>{}</a:ln>", solid(color))
 }
 
+pub fn raster(jpeg: bool) -> Vec<u8> {
+    use image::ImageEncoder;
+    let mut bytes = vec![];
+    if jpeg {
+        image::codecs::jpeg::JpegEncoder::new_with_quality(&mut bytes, 100)
+            .write_image(
+                &[20, 160, 60].repeat(6),
+                3,
+                2,
+                image::ExtendedColorType::Rgb8,
+            )
+            .unwrap();
+    } else {
+        // Distinct quadrants prove orientation; opaque alpha exercises RGBA decoding.
+        image::codecs::png::PngEncoder::new(&mut bytes)
+            .write_image(
+                &[
+                    255, 0, 0, 255, 0, 255, 0, 255, 0, 0, 255, 255, 255, 255, 0, 255,
+                ],
+                2,
+                2,
+                image::ExtendedColorType::Rgba8,
+            )
+            .unwrap();
+    }
+    bytes
+}
+
+pub fn picture(id: usize, coordinates: (i64, i64, i64, i64)) -> String {
+    let (x, y, cx, cy) = coordinates;
+    format!(
+        "<p:pic><p:nvPicPr><p:cNvPr id='{id}' name='Synthetic image'/><p:cNvPicPr><a:picLocks noChangeAspect='1'/></p:cNvPicPr><p:nvPr/></p:nvPicPr><p:blipFill><a:blip xmlns:r='{OFFICE_RELS}' r:embed='rImage'/><a:stretch><a:fillRect/></a:stretch></p:blipFill><p:spPr><a:xfrm><a:off x='{x}' y='{y}'/><a:ext cx='{cx}' cy='{cy}'/></a:xfrm><a:prstGeom prst='rect'><a:avLst/></a:prstGeom></p:spPr></p:pic>"
+    )
+}
+
+pub fn image_deck(jpeg: bool, drawings: &str) -> Parts {
+    let mut parts = content_deck(&background("FFFFFF"), drawings);
+    let extension = if jpeg { "jpeg" } else { "png" };
+    let types = parts
+        .iter()
+        .find(|(name, _)| name == "[Content_Types].xml")
+        .unwrap()
+        .1
+        .clone();
+    replace(
+        &mut parts,
+        "[Content_Types].xml",
+        String::from_utf8(types)
+            .unwrap()
+            .replace(
+                "</Types>",
+                "<Default Extension='jpeg' ContentType='image/jpeg'/></Types>",
+            )
+            .into_bytes(),
+    );
+    parts.push((format!("ppt/media/synthetic.{extension}"), raster(jpeg)));
+    parts.push((
+        "ppt/slides/_rels/slide1.xml.rels".into(),
+        rels(&relation(
+            "rImage",
+            "image",
+            &format!("../media/synthetic.{extension}"),
+        )),
+    ));
+    parts
+}
+
+pub fn image_fixtures() -> Vec<(&'static str, Parts)> {
+    let normal = (914_400, 914_400, 1_828_800, 1_828_800);
+    let image = picture(3, normal);
+    let rect = rectangle(
+        2,
+        (457_200, 457_200, 1_828_800, 1_828_800),
+        &solid("3060D0"),
+        "<a:ln><a:noFill/></a:ln>",
+    );
+    let ellipse = ellipse(
+        4,
+        (1_828_800, 1_828_800, 1_828_800, 914_400),
+        &solid("209060"),
+        "<a:ln><a:noFill/></a:ln>",
+    );
+    let line = straight_line(
+        5,
+        (914_400, 1_828_800, 3_657_600, 0),
+        &outline("D02030", 101_600),
+    );
+    vec![
+        ("one-png.pptx", image_deck(false, &image)),
+        (
+            "one-jpeg.pptx",
+            image_deck(true, &picture(2, (914_400, 914_400, 2_743_200, 1_828_800))),
+        ),
+        (
+            "positioned-image.pptx",
+            image_deck(false, &picture(2, NONTRIVIAL_RECT)),
+        ),
+        (
+            "scaled-image.pptx",
+            image_deck(false, &picture(2, (914_400, 914_400, 3_657_600, 914_400))),
+        ),
+        (
+            "image-with-shapes.pptx",
+            image_deck(false, &format!("{rect}{image}{ellipse}{line}")),
+        ),
+        (
+            "overlapping-image-shape.pptx",
+            image_deck(false, &format!("{image}{rect}")),
+        ),
+    ]
+}
+
 pub fn shape_fixtures() -> Vec<(&'static str, Parts)> {
     let no_line = "<a:ln><a:noFill/></a:ln>";
     let ellipse_box = (914_400, 914_400, 2_743_200, 1_828_800);

@@ -2,7 +2,7 @@ use std::{env, ffi::OsString, fs, path::PathBuf, process::ExitCode};
 
 use o2p_core::{Color, DisplayList, DrawOp, Font, LineOp, Page, Point, Rect, RectOp, Size, TextOp};
 
-const USAGE: &str = "Usage: o2p demo <output.pdf>\n       o2p inspect <file.pptx>\n       o2p convert <input.pptx> -o <output.pdf>\n       o2p --help\n\nPPTX conversion supports solid backgrounds and rectangles; empty slides produce blank pages.";
+const USAGE: &str = "Usage: o2p demo <output.pdf>\n       o2p inspect <file.pptx>\n       o2p convert <input.pptx> -o <output.pdf>\n       o2p --help\n\nPPTX conversion supports solid backgrounds, rectangles, ellipses, straight lines and embedded PNG/JPEG pictures; empty slides produce blank pages.";
 
 enum Command {
     Demo(PathBuf),

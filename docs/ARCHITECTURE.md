@@ -617,3 +617,111 @@ checks visible rectangle/ellipse/line commands and deterministic output. The
 existing package, metadata, blank-page, rectangle, inspect and demo tests remain.
 Text, images, groups, routed connectors, arrows, themes, masters, layouts,
 gradients, transparency and the other deferred formats/features are not added.
+
+# Milestone 1E: Embedded raster pictures
+
+The pipeline remains PPTX XML -> normalized PPTX model -> format-independent
+DisplayList -> PDF. The 1D baseline is `c97e0ce`. Package mechanics, metadata-only
+parsing, inspection, backgrounds and vector geometry retain their behavior.
+
+## Resource ownership and relationships
+
+Core adds `ImageFormat::{Png, Jpeg}`, `ImageResource { format, bytes: Arc<[u8]> }`
+and `ImageOp { rect, image: Arc<ImageResource> }` / `DrawOp::Image`. There are no
+relationship IDs, package names or Office concepts in these types. Signature
+detection identifies containers; validation and decoding belong to the backend.
+Core remains dependency-free. Cloning operations or DisplayLists shares bytes.
+
+Normalized `Shape::Image(ImageOp)` joins the existing ordered shape vector.
+`Slide::shapes()` includes pictures; its historical name preserves the public
+API. The adapter paints backgrounds first, then each vector shape or picture at
+its XML position. Pictures can appear above or below existing shapes.
+
+The bounded slide parser recognizes direct `p:pic`, `p:blipFill/a:blip` with
+namespaced `r:embed`, and `p:spPr/a:xfrm/a:off,a:ext`. Transitional and Strict
+namespaces and relationship types are accepted. It looks up IDs through
+`OoxmlPackage::relationships(Some(slide_part))`, checks image relationship types,
+and accesses canonical internal targets through `package.part()`. It never
+inspects ZIP internals or reconstructs relative targets. External images are
+warned about and never fetched. Missing/wrong references return `InvalidSlide`;
+dangling internal targets remain errors from the existing package reader.
+
+A parse-local cache keyed by media part name copies each supported referenced
+media buffer once from the borrowed package API into an Arc. Repeated pictures,
+slides, model clones and DisplayLists share this resource. The model outlives
+the package without copying any entire package or retaining XML. Until the
+package is released it holds the original part buffer alongside the one
+normalized copy. Unreferenced media is neither copied nor decoded. No package
+ownership rewrite, global registry or public resource-ID lifetime is needed.
+
+## Placement and supported subset
+
+Signed offsets and nonnegative dimensions reuse `emu_to_points` (f64 division by
+12,700 followed by f32 rounding). The full image maps to the transform rectangle,
+including differing aspect ratios. Absent stretch or empty `stretch/fillRect`
+supports this mapping. Editing-only `picLocks/noChangeAspect` does not alter
+explicit placement; DPI does not override the explicit dimensions.
+
+Source rectangles, tiling, nonempty stretch destination rectangles, nonzero
+rotation, true flips, placeholder pictures, nonrectangular/adjusted geometry and
+image effects produce slide-scoped `UnsupportedSlideContent` warnings and omit
+the picture. Other unsupported elements/attributes are warned about where
+practical. Missing picture properties/transform/blipFill are warned about;
+malformed references, duplicate supported metadata, invalid integers and
+booleans fail. This is a supported subset, not complete OOXML schema validation.
+
+PNG/JPEG signatures determine support independently of filename. Other formats
+emit a structured warning naming the content type. A PNG/JPEG-declared part with
+a bad signature fails parsing. Corrupt supported media fails decoding with
+owned `PdfError::InvalidImage { page, op, message }` (zero-based indices). No
+partial PDF is returned or written by the CLI. Animated PNG is explicitly
+rejected by the backend rather than silently selecting a frame.
+
+## PDF adapter, dependencies and limits
+
+The private raster adapter uses `image` exactly 0.25.8, with defaults disabled
+and only PNG/JPEG enabled. Its manifest declares Rust 1.85.0 and MIT OR Apache-2.0;
+the pin preserves the workspace minimum Rust version. Decoder dependencies are
+`png` 0.18.1 (MIT OR Apache-2.0) and `zune-jpeg` 0.4.21
+(MIT OR Apache-2.0 OR Zlib). Color/math dependencies `moxcms`/`pxfm` permit
+BSD-3-Clause OR Apache-2.0. Licenses were checked in downloaded manifests.
+There are no GPL libraries or network/runtime services. PPTX uses `image` only
+as a dev-dependency for original fixture generation. PDF reuses the existing
+pure-Rust `flate2` configuration for raster stream compression. No third-party
+types/errors cross library public APIs.
+
+Destination geometry uses existing rectangle validation. Each shared resource
+is decoded once and written as an RGB 8-bit Flate image XObject. JPEG follows
+the same decode/RGB path, avoiding direct DCT/CMYK embedding complexity. PNG
+alpha becomes a grayscale soft mask; opaque alpha needs no mask. Each draw saves
+graphics state, applies `[width,0,0,height,x,page_height-y-height]`, paints the
+XObject and restores state. Resources are deduplicated by Arc pointer identity
+without hashing/copying media. Object reservation checks integer limits.
+
+Before pixel decoding the adapter enforces hard limits of 16,384 per dimension,
+16,777,216 pixels and 128 MiB decoder allocation/output. These complement OPC
+part/compression limits and also protect generic core callers. They are decoder
+bounds, not a total heap budget: pixel conversion, alpha splitting, compression
+and PDF output require additional bounded buffers. Decoded buffers are released
+after each resource is written. PDF bytes still accumulate in memory. Identical
+input/backend versions remain deterministic.
+
+## Validation
+
+Six reproducible fixtures use original 2x2 RGBA color quadrants or a 3x2 green
+JPEG. Tests independently inspect XObject dimensions, decoded pixels (with JPEG
+tolerance), soft masks, matrices, resource sharing and overlapping paint order.
+Parser tests cover Strict namespaces, canonical relative targets, missing/wrong/
+external references, formats/crop/tile/effects, signed/fractional EMUs and bad
+media. Backend tests bound dimensions/pixels before allocation. Existing shape,
+metadata, package, inspect and demo tests remain regression coverage.
+
+```sh
+cargo run -p o2p-cli -- convert fixtures/pptx/image-with-shapes.pptx -o target/image-with-shapes.pdf
+```
+
+The CLI test checks raster/vector paint and deterministic output. The existing
+`one-image.pptx` now renders its supported picture and retains the unsupported
+hyperlink warning; its inspection behavior and fixture bytes remain unchanged.
+Text, SVG, advanced cropping/effects, groups, themes, masters, layouts and other
+document formats are not implemented.

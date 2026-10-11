@@ -1,6 +1,8 @@
 //! PresentationML/DrawingML semantics, isolated from OPC and PDF rendering.
-use o2p_core::{Color, Point, Rect, Size};
+use o2p_core::{Color, ImageFormat, ImageOp, ImageResource, Point, Rect, Size};
+use o2p_ooxml::{OoxmlPackage, RelationshipTarget};
 use roxmltree::Node;
+use std::{collections::BTreeMap, sync::Arc};
 
 use crate::{
     Fill, ParseLimits, PptxError, PptxWarning, Shape, Slide, SlideRef, Stroke, emu_to_points, xml,
@@ -10,8 +12,20 @@ const PML: &str = "http://schemas.openxmlformats.org/presentationml/2006/main";
 const STRICT_PML: &str = "http://purl.oclc.org/ooxml/presentationml/main";
 const DML: &str = "http://schemas.openxmlformats.org/drawingml/2006/main";
 const STRICT_DML: &str = "http://purl.oclc.org/ooxml/drawingml/main";
+const REL: &str = "http://schemas.openxmlformats.org/officeDocument/2006/relationships";
+const STRICT_REL: &str = "http://purl.oclc.org/ooxml/officeDocument/relationships";
+
+pub(super) fn is_image_relationship(kind: &str) -> bool {
+    matches!(
+        kind,
+        "http://schemas.openxmlformats.org/officeDocument/2006/relationships/image"
+            | "http://purl.oclc.org/ooxml/officeDocument/relationships/image"
+    )
+}
 
 pub(super) fn parse(
+    package: &OoxmlPackage,
+    images: &mut BTreeMap<String, Arc<ImageResource>>,
     bytes: &[u8],
     reference: &SlideRef,
     limits: ParseLimits,
@@ -27,6 +41,8 @@ pub(super) fn parse(
             });
         }
         let mut parser = Parser {
+            package,
+            images,
             reference,
             warnings,
             pml,
@@ -78,6 +94,11 @@ pub(super) fn parse(
                 } else {
                     for node in tree.children().filter(|node| node.is_element()) {
                         match (node.tag_name().namespace(), node.tag_name().name()) {
+                            (Some(ns), "pic") if ns == pml => {
+                                if let Some(image) = parser.picture(node)? {
+                                    slide.shapes.push(Shape::Image(image));
+                                }
+                            }
                             (Some(ns), "sp" | "cxnSp") if ns == pml => {
                                 if let Some(shape) = parser.shape(node)? {
                                     slide.shapes.push(shape);
@@ -97,6 +118,8 @@ pub(super) fn parse(
 }
 
 struct Parser<'a> {
+    package: &'a OoxmlPackage,
+    images: &'a mut BTreeMap<String, Arc<ImageResource>>,
     reference: &'a SlideRef,
     warnings: &'a mut Vec<PptxWarning>,
     pml: &'a str,
@@ -104,6 +127,249 @@ struct Parser<'a> {
 }
 
 impl Parser<'_> {
+    fn picture(&mut self, node: Node<'_, '_>) -> Result<Option<ImageOp>, PptxError> {
+        let pml = self.pml;
+        let dml = self.dml;
+        let rel = if pml == PML { REL } else { STRICT_REL };
+        self.attributes(node, &[]);
+        self.other_children(node, &[(pml, "nvPicPr"), (pml, "blipFill"), (pml, "spPr")]);
+        if let Some(nonvisual) = self.single(node, pml, "nvPicPr")? {
+            self.attributes(nonvisual, &[]);
+            self.other_children(
+                nonvisual,
+                &[(pml, "cNvPr"), (pml, "cNvPicPr"), (pml, "nvPr")],
+            );
+            if let Some(properties) = self.single(nonvisual, pml, "cNvPr")? {
+                self.attributes(properties, &["id", "name", "descr", "title"]);
+                self.other_children(properties, &[]);
+                if properties.attribute("hidden").is_some() {
+                    self.warn("hidden picture: picture omitted".into());
+                    return Ok(None);
+                }
+            }
+            if let Some(properties) = self.single(nonvisual, pml, "cNvPicPr")? {
+                self.attributes(properties, &["preferRelativeResize"]);
+                // Aspect locks constrain editing, not rendering into the explicit xfrm.
+                if let Some(locks) = self.single(properties, dml, "picLocks")? {
+                    self.attributes(locks, &["noChangeAspect"]);
+                    self.leaf(locks)?;
+                }
+                self.other_children(properties, &[(dml, "picLocks")]);
+            }
+            if let Some(properties) = self.single(nonvisual, pml, "nvPr")? {
+                self.attributes(properties, &[]);
+                self.other_children(properties, &[]);
+                if properties
+                    .children()
+                    .any(|child| child.has_tag_name((pml, "ph")))
+                {
+                    self.warn("placeholder picture: picture omitted".into());
+                    return Ok(None);
+                }
+            }
+        }
+        let Some(fill) = self.single(node, pml, "blipFill")? else {
+            self.warn("pic missing blipFill: picture omitted".into());
+            return Ok(None);
+        };
+        self.attributes(fill, &["dpi", "rotWithShape"]);
+        let blip = self
+            .single(fill, dml, "blip")?
+            .ok_or_else(|| self.invalid("picture missing blip"))?;
+        self.single(fill, dml, "stretch")?;
+        self.single(fill, dml, "srcRect")?;
+        let Some(id) = blip.attribute((rel, "embed")) else {
+            if blip.attribute((rel, "link")).is_some() {
+                self.warn("external image link: picture omitted (never fetched)".into());
+                return Ok(None);
+            }
+            return Err(self.invalid("picture missing embedded image reference"));
+        };
+        if id.is_empty() || id.trim() != id {
+            return Err(self.invalid("invalid embedded image reference"));
+        }
+        for attr in blip.attributes() {
+            if !((attr.namespace() == Some(rel) && attr.name() == "embed")
+                || (attr.namespace().is_none() && attr.name() == "cstate"))
+            {
+                self.warn(format!(
+                    "blip@{}",
+                    xml::expanded(attr.namespace(), attr.name())
+                ));
+            }
+        }
+        let relationship = self
+            .package
+            .relationships(Some(self.reference.part_name()))?
+            .iter()
+            .find(|relationship| relationship.id == id)
+            .ok_or_else(|| self.invalid("missing image relationship"))?;
+        if !is_image_relationship(&relationship.relationship_type) {
+            return Err(self.invalid("picture relationship type is not image"));
+        }
+        let RelationshipTarget::Internal(target) = &relationship.target else {
+            self.warn("external image relationship: picture omitted (never fetched)".into());
+            return Ok(None);
+        };
+        let media = self.package.part(target)?;
+        let Some(format) = ImageFormat::detect(media.bytes()) else {
+            if matches!(media.content_type(), "image/png" | "image/jpeg") {
+                return Err(self.invalid("malformed PNG/JPEG media signature"));
+            }
+            self.warn(format!(
+                "unsupported image format {}: picture omitted",
+                xml::expanded(None, media.content_type())
+            ));
+            return Ok(None);
+        };
+        let mut supported = true;
+        self.element_only(blip)?;
+        for child in blip.children().filter(|child| child.is_element()) {
+            self.unsupported(child);
+            supported = false;
+        }
+        // Empty stretch/fillRect is the common full-image mapping to xfrm.
+        for child in fill.children().filter(|child| child.is_element()) {
+            if child == blip {
+                continue;
+            }
+            if child.has_tag_name((dml, "stretch")) {
+                self.attributes(child, &[]);
+                let destination = self.single(child, dml, "fillRect")?;
+                if child.attributes().len() != 0
+                    || child.children().filter(|entry| entry.is_element()).count() != 1
+                    || destination.is_none_or(|rect| {
+                        rect.attributes().len() != 0
+                            || rect.children().any(|entry| entry.is_element())
+                    })
+                {
+                    self.warn("stretch destination rectangle: picture omitted".into());
+                    supported = false;
+                }
+                if let Some(destination) = destination {
+                    self.element_only(destination)?;
+                }
+            } else {
+                self.unsupported(child); // srcRect, tile, extensions
+                supported = false;
+            }
+        }
+        let Some(properties) = self.single(node, pml, "spPr")? else {
+            self.warn("inherited picture properties: picture omitted".into());
+            return Ok(None);
+        };
+        self.attributes(properties, &[]);
+        if properties
+            .attribute("bwMode")
+            .is_some_and(|mode| mode != "auto")
+        {
+            self.warn("picture black/white mode: picture omitted".into());
+            supported = false;
+        }
+        for child in properties.children().filter(|child| child.is_element()) {
+            if child.has_tag_name((dml, "xfrm")) {
+                continue;
+            }
+            if child.has_tag_name((dml, "prstGeom")) && child.attribute("prst") == Some("rect") {
+                self.attributes(child, &["prst"]);
+                self.element_only(child)?;
+                for adjustment in child.children().filter(|entry| entry.is_element()) {
+                    self.attributes(adjustment, &[]);
+                    self.element_only(adjustment)?;
+                    if !adjustment.has_tag_name((dml, "avLst"))
+                        || adjustment.children().any(|entry| entry.is_element())
+                    {
+                        self.unsupported(adjustment);
+                        supported = false;
+                    }
+                }
+            } else if child.has_tag_name((dml, "ln"))
+                && child.children().filter(|entry| entry.is_element()).count() == 1
+                && child
+                    .children()
+                    .any(|entry| entry.has_tag_name((dml, "noFill")))
+            {
+                self.attributes(child, &[]);
+                let no_fill = self
+                    .single(child, dml, "noFill")?
+                    .ok_or_else(|| self.invalid("missing noFill"))?;
+                self.attributes(no_fill, &[]);
+                self.leaf(no_fill)?;
+            } else {
+                self.unsupported(child);
+                supported = false;
+            }
+        }
+        let Some(transform) = self.single(properties, dml, "xfrm")? else {
+            self.warn("inherited picture transform: picture omitted".into());
+            return Ok(None);
+        };
+        self.attributes(transform, &["rot", "flipH", "flipV"]);
+        if transform.attribute("rot").is_some()
+            && self.integer(transform, "rot", i64::from(i32::MIN), i64::from(i32::MAX))? != 0
+        {
+            self.warn("picture rotation: picture omitted".into());
+            supported = false;
+        }
+        for name in ["flipH", "flipV"] {
+            if let Some(value) = transform.attribute(name) {
+                match value {
+                    "0" | "false" => {}
+                    "1" | "true" => {
+                        self.warn(format!("picture {name}: picture omitted"));
+                        supported = false;
+                    }
+                    _ => return Err(self.invalid(format!("invalid boolean {name}"))),
+                }
+            }
+        }
+        self.other_children(transform, &[(dml, "off"), (dml, "ext")]);
+        let offset = self
+            .single(transform, dml, "off")?
+            .ok_or_else(|| self.invalid("picture xfrm missing off"))?;
+        let extent = self
+            .single(transform, dml, "ext")?
+            .ok_or_else(|| self.invalid("picture xfrm missing ext"))?;
+        self.attributes(offset, &["x", "y"]);
+        self.attributes(extent, &["cx", "cy"]);
+        self.leaf(offset)?;
+        self.leaf(extent)?;
+        let rect = Rect {
+            origin: Point {
+                x: emu_to_points(self.integer(
+                    offset,
+                    "x",
+                    -27_273_042_329_600,
+                    27_273_042_316_900,
+                )?),
+                y: emu_to_points(self.integer(
+                    offset,
+                    "y",
+                    -27_273_042_329_600,
+                    27_273_042_316_900,
+                )?),
+            },
+            size: Size {
+                width: emu_to_points(self.integer(extent, "cx", 0, 27_273_042_316_900)?),
+                height: emu_to_points(self.integer(extent, "cy", 0, 27_273_042_316_900)?),
+            },
+        };
+        if !supported {
+            return Ok(None);
+        }
+        let image = self
+            .images
+            .entry(target.clone())
+            .or_insert_with(|| {
+                Arc::new(ImageResource {
+                    format,
+                    bytes: Arc::from(media.bytes()),
+                })
+            })
+            .clone();
+        Ok(Some(ImageOp { rect, image }))
+    }
+
     // Office writers commonly serialize an all-zero root xfrm. It does not
     // establish a transformed coordinate space and is safe as scaffolding.
     fn structural_group(&mut self, group: Node<'_, '_>) -> Result<bool, PptxError> {

@@ -105,9 +105,44 @@ pub struct LineOp {
     pub color: Color,
 }
 
+/// Encoded raster formats supported by the common image contract.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ImageFormat {
+    Png,
+    Jpeg,
+}
+
+impl ImageFormat {
+    /// Detect the container signature; decoding/validation belongs to the backend.
+    pub fn detect(bytes: &[u8]) -> Option<Self> {
+        if bytes.starts_with(b"\x89PNG\r\n\x1a\n") {
+            Some(Self::Png)
+        } else if bytes.starts_with(&[0xff, 0xd8, 0xff]) {
+            Some(Self::Jpeg)
+        } else {
+            None
+        }
+    }
+}
+
+/// Shared encoded bytes. Cloning a model or drawing operation does not copy media.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ImageResource {
+    pub format: ImageFormat,
+    pub bytes: std::sync::Arc<[u8]>,
+}
+
+/// Paint the full raster into an axis-aligned destination rectangle.
+#[derive(Debug, Clone, PartialEq)]
+pub struct ImageOp {
+    pub rect: Rect,
+    pub image: std::sync::Arc<ImageResource>,
+}
+
 /// An explicit drawing command. No Office or PDF semantics appear here.
 #[derive(Debug, Clone, PartialEq)]
 pub enum DrawOp {
+    Image(ImageOp),
     Text(TextOp),
     Rect(RectOp),
     StrokeRect(StrokeRectOp),
@@ -132,6 +167,26 @@ pub struct DisplayList {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn image_signatures_and_shared_ownership() {
+        use std::sync::Arc;
+        assert_eq!(
+            ImageFormat::detect(b"\x89PNG\r\n\x1a\n"),
+            Some(ImageFormat::Png)
+        );
+        assert_eq!(
+            ImageFormat::detect(&[0xff, 0xd8, 0xff]),
+            Some(ImageFormat::Jpeg)
+        );
+        assert_eq!(ImageFormat::detect(b"GIF89a"), None);
+        assert_eq!(ImageFormat::detect(&[]), None);
+        let resource = ImageResource {
+            format: ImageFormat::Png,
+            bytes: Arc::from(b"\x89PNG\r\n\x1a\n".as_slice()),
+        };
+        assert!(Arc::ptr_eq(&resource.bytes, &resource.clone().bytes));
+    }
 
     #[test]
     fn color_channels_are_exact() {

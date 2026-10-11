@@ -115,6 +115,33 @@ cargo run -p o2p-cli -- convert fixtures/pptx/mixed-shapes.pptx -o target/mixed-
 Later format support, richer typography, Flutter integration and advanced Office
 features remain future milestones. DOCX and XLSX are not part of current work.
 
+## Milestone 1E — Embedded raster pictures (complete)
+
+- Parse direct `p:pic` embedded PNG/JPEG references and explicit transforms through
+  bounded slide XML and existing package relationship/part APIs.
+- Add shared encoded resources and destination rectangles to the generic core;
+  normalize pictures in the existing ordered slide shape vector.
+- Copy each referenced media part once, sharing it across pictures/slides/models;
+  decode each resource once inside PDF and release pixel buffers per image.
+- Render RGB image XObjects with normal PNG alpha masks, preserving EMU placement,
+  size, orientation and z-order among backgrounds, rectangles, ellipses and lines.
+- Bound dimensions, pixels and decoder allocation; return owned errors for bad
+  references or corrupt media, preserving existing CLI output on failure.
+- Warn and omit unsupported formats, crops, tiling, destination stretch rectangles,
+  image effects, flips and rotations.
+- Add six synthetic fixtures, parser/ownership/PDF/security/overlap/CLI tests and
+  retain inspection and completed milestone regression coverage.
+- Add private PNG/JPEG-only `image` 0.25.8 (MIT OR Apache-2.0, Rust 1.85) and reuse
+  pure-Rust `flate2`; no external runtime processes/services are added.
+
+```sh
+cargo run -p o2p-cli -- convert fixtures/pptx/image-with-shapes.pptx -o target/image-with-shapes.pdf
+```
+
+PPTX text, SVG, advanced cropping/effects, groups, themes, masters, layouts,
+gradients, charts, SmartArt and animation remain deferred. DOCX, XLSX and Flutter
+remain outside this milestone. See ARCHITECTURE.md for exact limits and decisions.
+
 ## Validation
 
 ```sh

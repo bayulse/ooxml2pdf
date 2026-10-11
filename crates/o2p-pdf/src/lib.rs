@@ -4,7 +4,9 @@
 //! Milestone 0 maps the logical sans-serif face to PDF's standard Helvetica and
 //! accepts printable ASCII only. No system fonts or external processes are used.
 
-use std::{error::Error, fmt};
+mod raster;
+
+use std::{collections::BTreeMap, error::Error, fmt, sync::Arc};
 
 use o2p_core::{Color, DisplayList, DrawOp, Font, Point};
 use pdf_writer::{Content, Finish, Name, Pdf, Ref, Str};
@@ -12,6 +14,11 @@ use pdf_writer::{Content, Finish, Name, Pdf, Ref, Str};
 /// A rendering failure. Page and operation indices are zero-based.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum PdfError {
+    InvalidImage {
+        page: usize,
+        op: usize,
+        message: String,
+    },
     EmptyDocument,
     TooManyPages,
     InvalidGeometry {
@@ -29,6 +36,9 @@ pub enum PdfError {
 impl fmt::Display for PdfError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
+            Self::InvalidImage { page, op, message } => {
+                write!(f, "invalid image on page {page}, operation {op}: {message}")
+            }
             Self::EmptyDocument => write!(f, "a PDF must contain at least one page"),
             Self::TooManyPages => write!(f, "document exceeds the PDF object limit"),
             Self::InvalidGeometry { page, op, field } => {
@@ -89,6 +99,31 @@ pub fn render(display_list: &DisplayList) -> Result<Vec<u8>, PdfError> {
         .count(page_ids.len() as i32);
     pdf.type1_font(font).base_font(Name(b"Helvetica"));
 
+    // Pointer identity preserves shared resources without hashing/copying large bytes.
+    // Each decoder's pixel buffers are released immediately after its XObject is written.
+    let mut images = BTreeMap::new();
+    let mut next_object = 4 + display_list.pages.len() as i32 * 2;
+    for (page_index, page) in display_list.pages.iter().enumerate() {
+        for (op_index, op) in page.ops.iter().enumerate() {
+            if let DrawOp::Image(image) = op {
+                let key = Arc::as_ptr(&image.image) as usize;
+                if let std::collections::btree_map::Entry::Vacant(entry) = images.entry(key) {
+                    let reference = Ref::new(next_object);
+                    next_object = next_object.checked_add(2).ok_or(PdfError::TooManyPages)?;
+                    let name = format!("I{}", reference.get());
+                    raster::write(&mut pdf, reference, &image.image).map_err(|message| {
+                        PdfError::InvalidImage {
+                            page: page_index,
+                            op: op_index,
+                            message,
+                        }
+                    })?;
+                    entry.insert((name, reference));
+                }
+            }
+        }
+    }
+
     for (page, page_id) in display_list.pages.iter().zip(page_ids) {
         let stream_id = Ref::new(page_id.get() + 1);
         let mut pdf_page = pdf.page(page_id);
@@ -100,7 +135,22 @@ pub fn render(display_list: &DisplayList) -> Result<Vec<u8>, PdfError> {
             page.size.height,
         ));
         pdf_page.contents(stream_id);
-        pdf_page.resources().fonts().pair(font_name, font);
+        {
+            let mut resources = pdf_page.resources();
+            resources.fonts().pair(font_name, font);
+            if page.ops.iter().any(|op| matches!(op, DrawOp::Image(_))) {
+                let mut xobjects = resources.x_objects();
+                let mut used = std::collections::BTreeSet::new();
+                for op in &page.ops {
+                    if let DrawOp::Image(image) = op {
+                        let (name, reference) = &images[&(Arc::as_ptr(&image.image) as usize)];
+                        if used.insert(reference.get()) {
+                            xobjects.pair(Name(name.as_bytes()), *reference);
+                        }
+                    }
+                }
+            }
+        }
         pdf_page.finish();
 
         let mut content = Content::new();
@@ -108,6 +158,18 @@ pub fn render(display_list: &DisplayList) -> Result<Vec<u8>, PdfError> {
             // Every operation is isolated from the previous graphics state.
             content.save_state();
             match op {
+                DrawOp::Image(image) => {
+                    let (name, _) = &images[&(Arc::as_ptr(&image.image) as usize)];
+                    content.transform([
+                        image.rect.size.width,
+                        0.0,
+                        0.0,
+                        image.rect.size.height,
+                        image.rect.origin.x,
+                        page.size.height - image.rect.origin.y - image.rect.size.height,
+                    ]);
+                    content.x_object(Name(name.as_bytes()));
+                }
                 DrawOp::Text(text) => {
                     let Font::SansSerif = text.font;
                     fill_color(&mut content, text.color);
@@ -258,6 +320,15 @@ fn validate(display_list: &DisplayList) -> Result<(), PdfError> {
         for (op_index, op) in page.ops.iter().enumerate() {
             let index = Some(op_index);
             match op {
+                DrawOp::Image(image) => {
+                    validate_rect(image.rect, page.size.height).map_err(|field| {
+                        PdfError::InvalidGeometry {
+                            page: page_index,
+                            op: index,
+                            field,
+                        }
+                    })?;
+                }
                 DrawOp::Text(text) => {
                     check(finite_point(text.origin), index, "text origin")?;
                     check(

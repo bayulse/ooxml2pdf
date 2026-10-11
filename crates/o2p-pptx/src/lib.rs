@@ -1,7 +1,8 @@
 //! PresentationML -> normalized presentation and slides -> common DisplayList.
 //!
 //! Metadata-only parsing keeps slides opaque; content parsing supports solid
-//! backgrounds, rectangles, ellipses and straight lines. No PDF commands or external loading occur.
+//! backgrounds, rectangles, ellipses, straight lines and embedded raster pictures.
+//! No PDF commands or external loading occur.
 
 mod model;
 mod slide;
@@ -265,11 +266,14 @@ impl Presentation {
         limits: ParseLimits,
     ) -> Result<Self, PptxError> {
         let mut presentation = Self::parse(package, limits)?;
+        let mut images = BTreeMap::new();
         presentation
             .warnings
             .retain(|warning| !matches!(warning, PptxWarning::SlideContentNotRendered { .. }));
         for reference in &presentation.slides {
             let content = slide::parse(
+                package,
+                &mut images,
                 package.part(reference.part_name())?.bytes(),
                 reference,
                 limits,
@@ -277,6 +281,9 @@ impl Presentation {
             )?;
             presentation.contents.push(content);
             for relationship in package.relationships(Some(reference.part_name()))? {
+                if slide::is_image_relationship(&relationship.relationship_type) {
+                    continue;
+                }
                 presentation
                     .warnings
                     .push(PptxWarning::UnsupportedSlideContent {
