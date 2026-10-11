@@ -7,7 +7,11 @@ use std::{fs, path::Path};
 fn main() -> std::io::Result<()> {
     let directory = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../fixtures/pptx");
     fs::create_dir_all(&directory)?;
-    for (name, parts) in support::fixtures() {
+    for (name, parts) in support::fixtures()
+        .into_iter()
+        .chain(support::content_fixtures())
+        .chain(support::content_error_fixtures())
+    {
         fs::write(directory.join(name), support::zip(&parts, true, false))?;
     }
     Ok(())

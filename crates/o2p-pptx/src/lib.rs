@@ -1,9 +1,13 @@
-//! PresentationML metadata -> normalized presentation -> blank common pages.
+//! PresentationML -> normalized presentation and slides -> common DisplayList.
 //!
-//! Slide parts are deliberately opaque. No PDF commands, content parsing, file
-//! I/O, or external-resource loading occurs in this crate.
+//! Metadata-only parsing keeps slides opaque; content parsing supports solid
+//! backgrounds and rectangles. No PDF commands or external loading occur.
 
+mod model;
+mod slide;
 mod xml;
+
+pub use model::{Fill, Shape, Slide, Stroke};
 
 use std::{collections::BTreeMap, fmt};
 
@@ -14,7 +18,7 @@ const SLIDE_TYPE: &str = "application/vnd.openxmlformats-officedocument.presenta
 const SLIDE_REL: &str = "http://schemas.openxmlformats.org/officeDocument/2006/relationships/slide";
 const STRICT_SLIDE_REL: &str = "http://purl.oclc.org/ooxml/officeDocument/relationships/slide";
 
-/// Independent limits for presentation metadata, applied after package opening.
+/// Independent limits for each presentation/slide XML part and the slide list.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct ParseLimits {
     pub max_xml_size: usize,
@@ -47,6 +51,10 @@ pub enum PptxError {
         part: String,
         message: String,
     },
+    InvalidSlide {
+        part: String,
+        message: String,
+    },
     InvalidSlideRelationship {
         part: String,
         relationship_id: String,
@@ -64,6 +72,9 @@ impl fmt::Display for PptxError {
             Self::InvalidXml { part, message } => write!(f, "Invalid XML in {part}: {message}"),
             Self::InvalidMetadata { part, message } => {
                 write!(f, "Invalid presentation metadata in {part}: {message}")
+            }
+            Self::InvalidSlide { part, message } => {
+                write!(f, "Invalid slide in {part}: {message}")
             }
             Self::InvalidSlideRelationship {
                 part,
@@ -95,13 +106,19 @@ impl From<PackageError> for PptxError {
     }
 }
 
-/// Features intentionally left uninterpreted; these are not compatibility scans.
+/// Unsupported metadata and slide features in the implemented parsing subset.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum PptxWarning {
-    /// Every referenced slide yields this warning, even if its content is empty.
+    /// Metadata-only parsing warns for every reference, including empty slides.
     SlideContentNotRendered { slide_id: u32, part: String },
     /// An element or attribute outside the supported metadata subset is opaque.
     UnsupportedPresentationMetadata { part: String, name: String },
+    /// A slide element, attribute, color, or inherited property is unsupported.
+    UnsupportedSlideContent {
+        slide_id: u32,
+        part: String,
+        name: String,
+    },
 }
 
 impl fmt::Display for PptxWarning {
@@ -118,6 +135,13 @@ impl fmt::Display for PptxWarning {
                     f,
                     "{part}: unsupported presentation metadata {name} is not interpreted"
                 )
+            }
+            Self::UnsupportedSlideContent {
+                slide_id,
+                part,
+                name,
+            } => {
+                write!(f, "Slide {slide_id} ({part}): unsupported {name}")
             }
         }
     }
@@ -148,9 +172,9 @@ impl SlideSize {
 }
 
 /// Convert EMUs to core points: 914,400 EMUs/inch / 72 points/inch = 12,700.
-pub fn emu_to_points(emu: u32) -> f32 {
+pub fn emu_to_points(emu: impl Into<i64>) -> f32 {
     // Divide in f64 before rounding to the core's f32 representation.
-    (f64::from(emu) / 12_700.0) as f32
+    (emu.into() as f64 / 12_700.0) as f32
 }
 
 /// One reference in presentation order; hidden slides also produce a page.
@@ -170,12 +194,13 @@ impl SlideRef {
     }
 }
 
-/// Validated, owned metadata, independent of the XML tree and package lifetime.
-#[derive(Debug, Clone, PartialEq, Eq)]
+/// Owned metadata and optional slide content, independent of package/XML lifetimes.
+#[derive(Debug, Clone, PartialEq)]
 pub struct Presentation {
     size: SlideSize,
     slides: Vec<SlideRef>,
     warnings: Vec<PptxWarning>,
+    contents: Vec<Slide>,
 }
 
 impl Presentation {
@@ -229,7 +254,62 @@ impl Presentation {
             size: metadata.size,
             slides,
             warnings,
+            contents: vec![],
         })
+    }
+
+    /// Parse referenced slide parts in presentation order as well as metadata.
+    /// Byte, node and depth limits apply independently to each XML part.
+    pub fn parse_with_content(
+        package: &OoxmlPackage,
+        limits: ParseLimits,
+    ) -> Result<Self, PptxError> {
+        let mut presentation = Self::parse(package, limits)?;
+        presentation
+            .warnings
+            .retain(|warning| !matches!(warning, PptxWarning::SlideContentNotRendered { .. }));
+        for reference in &presentation.slides {
+            let content = slide::parse(
+                package.part(reference.part_name())?.bytes(),
+                reference,
+                limits,
+                &mut presentation.warnings,
+            )?;
+            presentation.contents.push(content);
+            for relationship in package.relationships(Some(reference.part_name()))? {
+                presentation
+                    .warnings
+                    .push(PptxWarning::UnsupportedSlideContent {
+                        slide_id: reference.id(),
+                        part: reference.part_name().into(),
+                        name: format!(
+                            "slide relationship {}",
+                            xml::expanded(None, &relationship.relationship_type)
+                        ),
+                    });
+            }
+        }
+        Ok(presentation)
+    }
+
+    /// Parsed content in `slides()` order; empty after metadata-only parsing.
+    pub fn slide_contents(&self) -> &[Slide] {
+        &self.contents
+    }
+
+    /// Paint backgrounds first, then shapes in XML order. Metadata-only models
+    /// produce blank pages and retain their existing unrendered-content warnings.
+    pub fn to_display_list(&self) -> DisplayList {
+        if self.contents.is_empty() {
+            return self.to_blank_display_list();
+        }
+        DisplayList {
+            pages: self
+                .contents
+                .iter()
+                .map(|slide| slide.to_page(self.size.to_points()))
+                .collect(),
+        }
     }
 
     pub fn size(&self) -> SlideSize {

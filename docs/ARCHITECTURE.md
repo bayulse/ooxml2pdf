@@ -409,3 +409,126 @@ MediaBoxes and empty content streams. CLI tests cover conversion, warnings in
 presentation order, deterministic overwrites, help, errors and preservation of
 existing output on input failure. A deeply nested presentation is a regression
 fixture for rejection before recursive tree parsing.
+
+# Milestone 1C: Slide backgrounds and rectangles
+
+The content-aware pipeline is now:
+
+```text
+PPTX -> o2p-ooxml package -> o2p-pptx metadata and slide XML
+     -> normalized Presentation / Slide / Shape / Fill / Stroke
+     -> o2p-core DisplayList -> o2p-pdf -> PDF bytes
+```
+
+OPC reading and inspection are unchanged. `o2p-pptx` owns PresentationML and
+DrawingML semantics, unit conversion, and the normalized-model-to-DisplayList
+adapter. The core and PDF crates contain no PPTX concepts. No new dependency
+is introduced; the existing private `roxmltree` adapter is reused for slides.
+
+## APIs and normalized content
+
+`Presentation::parse` and `to_blank_display_list` retain Milestone 1B behavior,
+including opaque slide bytes and `SlideContentNotRendered` warnings.
+`Presentation::parse_with_content` first resolves metadata through that same
+path, then parses each referenced slide part in presentation order. It replaces
+the blanket slide warnings with specific content warnings. Orphan slide parts
+remain opaque. Malformed referenced slide XML fails conversion before output
+is written. `slide_contents()` returns one owned `Slide` per ordered reference;
+it is empty for metadata-only models. No XML parser types escape the adapter.
+
+Each slide has an optional background and ordered `Shape::Rectangle` values.
+Rectangle geometry uses core `Rect` in points. `Fill::Solid(Color)` represents
+an opaque resolved sRGB color, and `Fill::None` an explicit `noFill`. A shape's
+`Option<Fill>` distinguishes absent/unresolved paint from explicit no fill.
+`Stroke { color, width }` represents an optional resolved solid outline, with
+width in points. Content model values use `PartialEq` because geometry is `f32`;
+`Presentation` consequently no longer implements `Eq`.
+
+`to_display_list()` paints a supported background as a full-page filled
+rectangle, then each shape's fill and outline in XML order. Metadata-only
+models produce blank pages. `to_blank_display_list()` remains explicitly blank
+even when called on a content-aware model. No fill operation is emitted for
+explicit `noFill` or unresolved fill; a resolved outline still paints. Shapes
+with no paint retain their normalized geometry but produce no drawing operations.
+
+## Supported semantics, units and warnings
+
+The parser supports Transitional and Strict PresentationML/DrawingML namespaces,
+independently of namespace prefixes. It reads `cSld/bg/bgPr` backgrounds and
+direct `spTree/sp` rectangle shapes with explicit `spPr`, `a:prstGeom prst="rect"`,
+and `a:xfrm` offset/extent. Structural nonvisual metadata is not rendered.
+An empty root `grpSpPr`, or an all-zero root transform commonly emitted by
+Office writers, is accepted as scaffolding. Actual root group transforms omit
+the shape tree with a warning; nested groups are unsupported.
+
+All geometry uses the single `emu_to_points(impl Into<i64>)` helper: divide
+by 12,700 in `f64`, then round once to `f32`. Existing `u32` slide sizes still
+work; signed positions, dimensions and line widths use the same helper. Shape
+offsets are bounded to DrawingML's coordinate range
+−27,273,042,329,600–27,273,042,316,900 EMUs; extents are nonnegative up to the
+positive upper bound. Negative positions and zero extents remain valid. Explicit
+outline widths must be 0–20,116,800 EMUs; zero produces no stroke, avoiding an
+accidental PDF hairline. For an explicit solid outline with omitted width,
+the parser uses the [documented 0.75-point DrawingML base default](https://learn.microsoft.com/en-us/openspecs/office_standards/ms-oi29500/c0c046ec-a61d-405d-88fe-74d8487a37d7)
+and warns that inherited width is unresolved. A missing outline is unresolved
+and warned about; explicit line `noFill` requires no width default.
+
+Colors require a six-digit hexadecimal `a:srgbClr/@val` (either case).
+Scheme/theme, system and other color representations emit
+`UnsupportedSlideContent { slide_id, part, name }` and omit the affected paint.
+Color transforms, including alpha, tint and shade, also warn and omit paint.
+The parser never substitutes a scheme color's name or a system fallback color.
+Gradients, pattern/image/group fills and background style references are opaque
+and warned about. Missing explicit shape paint warns about unresolved inheritance.
+
+Only simple centered solid outlines are supported. Explicit `prstDash="solid"`
+and default-valued `cap="flat"`, `cmpd="sng"`, `algn="ctr"` are accepted.
+Other dashes, compound lines, joins, ends or alignment/cap styles warn and omit
+the outline while preserving an independently supported fill. Rotation and
+flips omit the rectangle with warnings; zero rotation and false flips work.
+Nonrectangular/custom/inherited geometry, adjusted presets and placeholders
+are omitted with warnings. Text bodies, pictures, graphic frames, groups,
+effects, style references, color-map overrides, extensions and other content
+are not rendered and receive warnings at their opaque subtree boundary.
+Slide relationships (including layouts, images and external links) are warned
+about and never followed. Themes, masters and layouts are not implemented.
+
+Unsupported element/attribute warnings use bounded diagnostic names. Malformed
+supported values, missing required geometry, conflicting fill declarations,
+duplicate supported properties and invalid slide roots return the owned
+`InvalidSlide` error. Malformed XML still returns `InvalidXml`. This remains a
+supported subset rather than complete OOXML schema validation.
+
+The same byte, decoded-byte, node and depth limits apply **per XML part**;
+slide count remains bounded by the presentation parser. The adapter keeps its
+64-element hard depth ceiling, DTD rejection, encoding checks and lexical
+preflight before recursive tree construction. Slides are parsed one at a time;
+XML trees are released after each normalized slide is built. Package limits bound
+aggregate input; these limits are not an exact heap-usage budget.
+
+## Minimal core/PDF integration and CLI
+
+The existing filled `RectOp` remains unchanged. The sole new drawing primitive is
+`StrokeRectOp { rect, color, width }` / `DrawOp::StrokeRect`, an axis-aligned closed
+outline centered on its rectangle edges. PDF rendering validates its geometry
+and positive finite width, isolates graphics state, converts top-left coordinates
+using the existing convention, and emits a closed rectangle stroke with no fill.
+The PDF backend receives only the DisplayList and never interprets PPTX XML.
+
+`o2p convert` now calls `parse_with_content` and `to_display_list`; stdout reports
+the page count without claiming all pages are blank. Empty slides still produce
+blank pages. Warnings remain on stderr; argument parsing, native paths, inspection,
+demo, deterministic output, overwrite and failure behavior remain intact.
+
+```sh
+cargo run -p o2p-cli -- convert fixtures/pptx/filled-rectangle.pptx -o target/filled-rectangle.pdf
+```
+
+The required six synthetic fixtures cover backgrounds, basic/nontrivial
+rectangles, fills, outlines, no fill and overlapping shapes. Additional fixtures
+verify visibly distinct reordered pages and unsupported scheme/dash styles.
+Tests independently decode PDF operators to verify geometry, top-left conversion,
+paint order, colors and width. Parser tests cover namespace/encoding variants,
+unsupported features, malformed values and per-slide security limits. CLI tests
+verify visible filled-rectangle commands, warnings, blank-page preservation,
+determinism and failure behavior. Existing metadata/package/demo tests remain.

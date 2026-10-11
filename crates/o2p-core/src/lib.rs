@@ -71,6 +71,15 @@ pub struct RectOp {
     pub color: Color,
 }
 
+/// A closed rectangle outline, centered on the rectangle's edges.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct StrokeRectOp {
+    pub rect: Rect,
+    pub color: Color,
+    /// Positive width in points.
+    pub width: f32,
+}
+
 /// A solid line with a positive width in points.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct LineOp {
@@ -85,6 +94,7 @@ pub struct LineOp {
 pub enum DrawOp {
     Text(TextOp),
     Rect(RectOp),
+    StrokeRect(StrokeRectOp),
     Line(LineOp),
 }
 

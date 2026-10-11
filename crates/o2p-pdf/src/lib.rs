@@ -142,6 +142,18 @@ pub fn render(display_list: &DisplayList) -> Result<Vec<u8>, PdfError> {
                     content.line_to(line.end.x, page.size.height - line.end.y);
                     content.stroke();
                 }
+                DrawOp::StrokeRect(rect) => {
+                    let [r, g, b] = rgb(rect.color);
+                    content.set_stroke_rgb(r, g, b);
+                    content.set_line_width(rect.width);
+                    content.rect(
+                        rect.rect.origin.x,
+                        page.size.height - rect.rect.origin.y - rect.rect.size.height,
+                        rect.rect.size.width,
+                        rect.rect.size.height,
+                    );
+                    content.stroke();
+                }
             }
             content.restore_state();
         }
@@ -202,20 +214,24 @@ fn validate(display_list: &DisplayList) -> Result<(), PdfError> {
                         });
                     }
                 }
+                DrawOp::StrokeRect(rect) => {
+                    check(positive(rect.width), index, "rectangle outline width")?;
+                    validate_rect(rect.rect, page.size.height).map_err(|field| {
+                        PdfError::InvalidGeometry {
+                            page: page_index,
+                            op: index,
+                            field,
+                        }
+                    })?;
+                }
                 DrawOp::Rect(rect) => {
-                    check(finite_point(rect.rect.origin), index, "rectangle origin")?;
-                    check(
-                        nonnegative(rect.rect.size.width) && nonnegative(rect.rect.size.height),
-                        index,
-                        "rectangle size",
-                    )?;
-                    check(
-                        (page.size.height - rect.rect.origin.y - rect.rect.size.height).is_finite()
-                            && (rect.rect.origin.x + rect.rect.size.width).is_finite()
-                            && (rect.rect.origin.y + rect.rect.size.height).is_finite(),
-                        index,
-                        "rectangle position",
-                    )?;
+                    validate_rect(rect.rect, page.size.height).map_err(|field| {
+                        PdfError::InvalidGeometry {
+                            page: page_index,
+                            op: index,
+                            field,
+                        }
+                    })?;
                 }
                 DrawOp::Line(line) => {
                     check(
@@ -233,6 +249,22 @@ fn validate(display_list: &DisplayList) -> Result<(), PdfError> {
                 }
             }
         }
+    }
+    Ok(())
+}
+
+fn validate_rect(rect: o2p_core::Rect, page_height: f32) -> Result<(), &'static str> {
+    if !finite_point(rect.origin) {
+        return Err("rectangle origin");
+    }
+    if !nonnegative(rect.size.width) || !nonnegative(rect.size.height) {
+        return Err("rectangle size");
+    }
+    if !(page_height - rect.origin.y - rect.size.height).is_finite()
+        || !(rect.origin.x + rect.size.width).is_finite()
+        || !(rect.origin.y + rect.size.height).is_finite()
+    {
+        return Err("rectangle position");
     }
     Ok(())
 }

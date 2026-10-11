@@ -2,7 +2,7 @@ use std::{env, ffi::OsString, fs, path::PathBuf, process::ExitCode};
 
 use o2p_core::{Color, DisplayList, DrawOp, Font, LineOp, Page, Point, Rect, RectOp, Size, TextOp};
 
-const USAGE: &str = "Usage: o2p demo <output.pdf>\n       o2p inspect <file.pptx>\n       o2p convert <input.pptx> -o <output.pdf>\n       o2p --help\n\nPPTX conversion currently produces blank pages; slide content is not rendered.";
+const USAGE: &str = "Usage: o2p demo <output.pdf>\n       o2p inspect <file.pptx>\n       o2p convert <input.pptx> -o <output.pdf>\n       o2p --help\n\nPPTX conversion supports solid backgrounds and rectangles; empty slides produce blank pages.";
 
 enum Command {
     Demo(PathBuf),
@@ -95,9 +95,10 @@ fn main() -> ExitCode {
         Command::Convert { input, output } => {
             let presentation =
                 match o2p_ooxml::OoxmlPackage::open(&input, o2p_ooxml::SecurityLimits::default()) {
-                    Ok(package) => {
-                        o2p_pptx::Presentation::parse(&package, o2p_pptx::ParseLimits::default())
-                    }
+                    Ok(package) => o2p_pptx::Presentation::parse_with_content(
+                        &package,
+                        o2p_pptx::ParseLimits::default(),
+                    ),
                     Err(error) => Err(error.into()),
                 };
             let presentation = match presentation {
@@ -107,7 +108,7 @@ fn main() -> ExitCode {
                     return ExitCode::FAILURE;
                 }
             };
-            let bytes = match o2p_pdf::render(&presentation.to_blank_display_list()) {
+            let bytes = match o2p_pdf::render(&presentation.to_display_list()) {
                 Ok(bytes) => bytes,
                 Err(error) => {
                     eprintln!("PDF rendering failed: {error}");
@@ -122,7 +123,7 @@ fn main() -> ExitCode {
                 eprintln!("Warning: {warning}");
             }
             println!(
-                "Wrote {} ({} blank pages)",
+                "Wrote {} ({} pages)",
                 output.display(),
                 presentation.slides().len()
             );

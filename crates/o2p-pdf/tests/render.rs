@@ -324,3 +324,105 @@ fn negative_positions_and_zero_sized_rectangles_are_valid() {
     };
     Document::load_mem(&render(&display).unwrap()).unwrap();
 }
+
+#[test]
+fn closed_rectangle_outline_has_isolated_stroke_state_and_no_fill() {
+    let mut display = fixture();
+    let DrawOp::Rect(rect) = display.pages[0].ops[1] else {
+        unreachable!()
+    };
+    display.pages[0].ops = vec![DrawOp::StrokeRect(o2p_core::StrokeRectOp {
+        rect: rect.rect,
+        color: Color::rgb(0, 0, 255),
+        width: 2.5,
+    })];
+    let pdf = Document::load_mem(&render(&display).unwrap()).unwrap();
+    let content = Content::decode(&pdf.get_page_content(pdf.get_pages()[&1]).unwrap()).unwrap();
+    assert_eq!(
+        content
+            .operations
+            .iter()
+            .map(|op| op.operator.as_str())
+            .collect::<Vec<_>>(),
+        ["q", "RG", "w", "re", "S", "Q"]
+    );
+    assert_eq!(numbers(&content.operations[1].operands), [0.0, 0.0, 1.0]);
+    assert_eq!(numbers(&content.operations[2].operands), [2.5]);
+    assert_eq!(
+        numbers(&content.operations[3].operands),
+        [10.0, 210.0, 50.0, 30.0]
+    );
+}
+
+#[test]
+fn rectangle_outline_validates_width_and_geometry_before_rendering() {
+    let base = o2p_core::StrokeRectOp {
+        rect: Rect {
+            origin: Point { x: 10.0, y: 20.0 },
+            size: Size {
+                width: 30.0,
+                height: 40.0,
+            },
+        },
+        color: Color::BLACK,
+        width: 1.0,
+    };
+    for width in [0.0, -1.0, f32::NAN, f32::INFINITY] {
+        let mut display = fixture();
+        display.pages[0].ops = vec![DrawOp::StrokeRect(o2p_core::StrokeRectOp { width, ..base })];
+        assert_eq!(
+            render(&display),
+            Err(PdfError::InvalidGeometry {
+                page: 0,
+                op: Some(0),
+                field: "rectangle outline width"
+            })
+        );
+    }
+    for (rect, field) in [
+        (
+            Rect {
+                origin: Point {
+                    x: f32::NAN,
+                    y: 0.0,
+                },
+                ..base.rect
+            },
+            "rectangle origin",
+        ),
+        (
+            Rect {
+                size: Size {
+                    width: -1.0,
+                    height: 1.0,
+                },
+                ..base.rect
+            },
+            "rectangle size",
+        ),
+        (
+            Rect {
+                origin: Point {
+                    x: f32::MAX,
+                    y: 0.0,
+                },
+                size: Size {
+                    width: f32::MAX,
+                    height: 1.0,
+                },
+            },
+            "rectangle position",
+        ),
+    ] {
+        let mut display = fixture();
+        display.pages[0].ops = vec![DrawOp::StrokeRect(o2p_core::StrokeRectOp { rect, ..base })];
+        assert_eq!(
+            render(&display),
+            Err(PdfError::InvalidGeometry {
+                page: 0,
+                op: Some(0),
+                field
+            })
+        );
+    }
+}

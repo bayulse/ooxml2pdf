@@ -1,6 +1,6 @@
 [package]
 name = "o2p-pptx"
-description = "PPTX presentation metadata and blank-page DisplayList conversion"
+description = "PPTX metadata, basic slide parsing and DisplayList conversion"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true

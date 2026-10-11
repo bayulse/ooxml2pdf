@@ -60,13 +60,31 @@ The first end-to-end pipeline is now PPTX -> OPC package -> presentation model
 is intentionally not rendered. Empty slide-reference lists are rejected. See
 [ARCHITECTURE.md](ARCHITECTURE.md) for contracts, units, warnings and limits.
 
-## Milestone 1C — PPTX layout to DisplayList (planned)
+## Milestone 1C — Slide backgrounds and rectangles (complete)
 
-Extend PPTX parsing with the agreed basic slide content, normalize it, and lay
-it out into the common DisplayList using the existing PDF backend. Add
-rendering regression fixtures for text,
-images, rectangles, ellipses, lines, fills and borders. Extend shared primitives
-only as needed for demonstrated rendering behaviors.
+- Add content-aware PPTX parsing through the existing bounded XML adapter;
+  preserve the metadata-only and blank-page APIs from Milestone 1B.
+- Parse referenced slide parts in presentation order into owned `Slide`,
+  `Shape`, `Fill`, and `Stroke` values.
+- Render explicit solid sRGB slide backgrounds and axis-aligned rectangle
+  geometry, solid/no fill, and simple solid outlines.
+- Centralize EMU-to-point conversion for slide sizes, signed positions,
+  dimensions and outline widths.
+- Convert the normalized model to format-independent core operations. Add
+  only `StrokeRectOp` / `DrawOp::StrokeRect` to the existing core/PDF contract.
+- Report unsupported colors, transforms, styles, inherited properties and
+  other content through slide-scoped structured warnings.
+- Switch `o2p convert` to the content-aware path; preserve `inspect`, `demo`,
+  blank output, CLI arguments, deterministic output and failure handling.
+- Add deterministic synthetic backgrounds/rectangle/order/style fixtures,
+  parser/security tests, independent PDF operator tests and CLI conversion tests.
+- Reuse all existing dependencies; package/OPC behavior remains unchanged.
+
+Current content scope is deliberately limited to backgrounds and rectangles.
+Text, images, ellipses, lines, groups, themes, masters, layouts, gradients,
+transparency, charts, SmartArt and animations are deferred. Unresolved colors
+and styles are warned about rather than guessed. See
+[ARCHITECTURE.md](ARCHITECTURE.md) for the precise behavior and defaults.
 
 Later format support, richer typography, Flutter integration and advanced Office
 features remain future milestones. DOCX and XLSX are not part of current work.

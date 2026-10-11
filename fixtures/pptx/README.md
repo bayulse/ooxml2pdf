@@ -53,3 +53,25 @@ size have no visual slide identity. Tests also check empty PDF content streams,
 page counts and MediaBoxes with an independent PDF reader. Presentation-size
 errors and nesting errors remain inspectable through the metadata-only package
 inventory command, which deliberately does not parse presentation semantics.
+
+## Milestone 1C content fixtures
+
+Generated from original XML by the same Rust regenerator; existing Milestone 1A
+and 1B fixture bytes remain unchanged. No proprietary documents are used.
+
+| File | Purpose |
+| --- | --- |
+| `solid-background.pptx` | Full-slide solid sRGB `304050` background |
+| `one-rectangle.pptx` | Black rectangle at (72, 72), size 144 × 72 points |
+| `filled-rectangle.pptx` | Blue `2060D0` fill; offset (1,234,567, 765,432) and size (3,456,789, 2,345,678) EMUs, testing fractional point conversion |
+| `outlined-rectangle.pptx` | `CCDDEE` fill and `D02030` outline of 31,750 EMUs (2.5 points) |
+| `no-fill-rectangle.pptx` | Explicit no fill; outline over an `E0E8F0` background |
+| `multiple-rectangles.pptx` | Background and three overlapping rectangles; final outline starts at negative x |
+| `reordered-rectangles.pptx` | Blue, red, green pages in slide3/slide1/slide2 reference order |
+| `unsupported-style.pptx` | Unresolved scheme fill and dashed outline yield structured warnings and omit paint |
+| `invalid-slide-root.pptx` | Well-formed XML with an invalid slide root fails conversion without overwriting output |
+| `deep-slide.pptx` | Excessive slide nesting is rejected before recursive XML parsing |
+
+Regenerate with `cargo run --offline -p o2p-pptx --example generate_fixtures`.
+Tests compare generated ZIP bytes with committed fixtures, independently parse
+rendered PDFs, and verify normalized model values and warnings.

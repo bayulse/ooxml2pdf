@@ -5,7 +5,8 @@ A native Rust foundation for an offline OOXML-to-PDF engine.
 Milestone 0 renders a format-independent DisplayList containing text, filled
 rectangles and lines into a PDF. Milestone 1A opens and inspects PPTX packages;
 Milestone 1B converts PPTX metadata into blank PDF pages with the presentation's
-real dimensions and slide order. Slide content parsing/rendering remains future work.
+real dimensions and slide order. Milestone 1C renders explicit solid slide
+backgrounds and rectangles with solid fills or basic outlines.
 
 Generate the deterministic demo:
 
@@ -28,12 +29,12 @@ resource limits; external relationships are preserved and never fetched.
 
 The workspace contains `o2p-core` (dependency-free drawing model), `o2p-pdf`
 (PDF bytes), `o2p-ooxml` (OOXML / OPC packages), `o2p-pptx` (presentation metadata
-and blank pages), and `o2p-cli` (`o2p` executable).
+and normalized slide content), and `o2p-cli` (`o2p` executable).
 Processing is pure Rust and needs
 no network access, system fonts, browser, LibreOffice or external executable.
 The initial backend supports printable ASCII in standard Helvetica.
 
-Convert a PPTX into intentionally blank PDF pages:
+Convert a PPTX into PDF pages:
 
 ```sh
 cargo run -p o2p-cli -- convert fixtures/pptx/three-slides-16x9.pptx -o target/three-slides.pdf
@@ -41,10 +42,18 @@ cargo run -p o2p-cli -- convert fixtures/pptx/three-slides-16x9.pptx -o target/t
 
 Each referenced slide produces one page in presentation order; this example
 creates three 960 × 540 point pages. Slide filenames do not determine order.
-Structured warnings report unrendered slide content and unsupported presentation
-metadata. The CLI prints warnings on stderr. Missing/invalid slide sizes or slide
+Explicit sRGB solid backgrounds and axis-aligned rectangles support solid/no
+fill and simple solid outlines. Text, images, themes, inherited styles and other
+features remain unsupported and produce structured warnings on stderr.
+Missing/invalid slide sizes, malformed referenced slide XML, or slide
 relationships fail before writing output. Existing output files are overwritten
 after successful parsing/rendering; the parent directory must exist.
+
+Render the synthetic filled-rectangle example:
+
+```sh
+cargo run -p o2p-cli -- convert fixtures/pptx/filled-rectangle.pptx -o target/filled-rectangle.pdf
+```
 
 ```sh
 cargo fmt

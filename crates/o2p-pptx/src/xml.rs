@@ -168,7 +168,7 @@ fn warning(part: &str, name: String) -> PptxWarning {
     }
 }
 
-fn expanded(namespace: Option<&str>, local: &str) -> String {
+pub(super) fn expanded(namespace: Option<&str>, local: &str) -> String {
     // Namespace bindings are shared by the XML tree. Copying a huge namespace
     // URI into every warning could amplify bounded XML into unbounded reports.
     let diagnostic = |value: &str| {
@@ -245,7 +245,12 @@ fn integer(node: Node<'_, '_>, name: &str, part: &str) -> Result<u32, PptxError>
         .map_err(|_| invalid(part, format!("overflowing integer {name}")))
 }
 
-pub(super) fn parse(bytes: &[u8], part: &str, limits: ParseLimits) -> Result<Metadata, PptxError> {
+pub(super) fn with_document<T>(
+    bytes: &[u8],
+    part: &str,
+    limits: ParseLimits,
+    parse: impl FnOnce(&Document<'_>) -> Result<T, PptxError>,
+) -> Result<T, PptxError> {
     if bytes.len() > limits.max_xml_size {
         return Err(limit("max_xml_size"));
     }
@@ -273,6 +278,20 @@ pub(super) fn parse(bytes: &[u8], part: &str, limits: ParseLimits) -> Result<Met
         bytes.starts_with(&[0xff, 0xfe]) || bytes.starts_with(&[0xfe, 0xff]),
         part,
     )?;
+    parse(&document)
+}
+
+pub(super) fn parse(bytes: &[u8], part: &str, limits: ParseLimits) -> Result<Metadata, PptxError> {
+    with_document(bytes, part, limits, |document| {
+        metadata(document, part, limits)
+    })
+}
+
+fn metadata(
+    document: &Document<'_>,
+    part: &str,
+    limits: ParseLimits,
+) -> Result<Metadata, PptxError> {
     let root = document.root_element();
     let namespace = root.tag_name().namespace().unwrap_or("");
     if root.tag_name().name() != "presentation" || !matches!(namespace, PML | STRICT_PML) {

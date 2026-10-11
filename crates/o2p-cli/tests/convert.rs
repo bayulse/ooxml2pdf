@@ -44,7 +44,7 @@ fn convert(input: &Path, output: &Path) -> std::process::Output {
 }
 
 #[test]
-fn conversion_writes_deterministic_blank_pages_with_correct_dimensions_and_warnings() {
+fn conversion_preserves_deterministic_blank_pages_with_correct_dimensions() {
     let directory = TestDirectory::new();
     for (name, count, width) in [
         ("one-slide-standard.pptx", 1, 720.0),
@@ -60,22 +60,19 @@ fn conversion_writes_deterministic_blank_pages_with_correct_dimensions_and_warni
             "{}",
             String::from_utf8_lossy(&output.stderr)
         );
-        assert!(String::from_utf8_lossy(&output.stdout).contains(&format!("{count} blank pages")));
+        assert!(String::from_utf8_lossy(&output.stdout).contains(&format!("{count} pages")));
         let warnings = String::from_utf8(output.stderr).unwrap();
-        assert_eq!(
-            warnings
-                .matches("content is not rendered; page is blank")
-                .count(),
-            count
-        );
-        if name == "reordered-slides.pptx" {
-            let order: Vec<_> = warnings
-                .lines()
-                .filter(|line| line.contains("content is not rendered"))
-                .collect();
-            assert!(order[0].contains("slide3.xml"));
-            assert!(order[1].contains("slide1.xml"));
-            assert!(order[2].contains("slide2.xml"));
+        if name == "one-image.pptx" {
+            assert!(warnings.contains("slide relationship"));
+            assert!(warnings.contains("image"));
+        } else {
+            assert_eq!(warnings.matches("clrMapOvr").count(), count);
+            if name == "reordered-slides.pptx" {
+                let order: Vec<_> = warnings.lines().collect();
+                assert!(order[0].contains("slide3.xml"));
+                assert!(order[1].contains("slide1.xml"));
+                assert!(order[2].contains("slide2.xml"));
+            }
         }
         let bytes = fs::read(&destination).unwrap();
         let pdf = lopdf::Document::load_mem(&bytes).unwrap();
@@ -112,6 +109,8 @@ fn conversion_failures_do_not_create_or_overwrite_output() {
         "malformed-slide-size.pptx",
         "malformed-relationships.pptx",
         "path-traversal.pptx",
+        "invalid-slide-root.pptx",
+        "deep-slide.pptx",
     ] {
         for existing in [false, true] {
             let destination = directory.0.join(format!("{name}-{existing}.pdf"));
@@ -129,6 +128,71 @@ fn conversion_failures_do_not_create_or_overwrite_output() {
             }
         }
     }
+}
+
+#[test]
+fn filled_rectangle_conversion_contains_visible_fill_with_correct_geometry() {
+    let directory = TestDirectory::new();
+    let destination = directory.0.join("filled-rectangle.pdf");
+    let output = convert(&fixture("filled-rectangle.pptx"), &destination);
+    assert!(
+        output.status.success(),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    assert!(output.stderr.is_empty());
+    assert!(String::from_utf8_lossy(&output.stdout).contains("1 pages"));
+    let bytes = fs::read(&destination).unwrap();
+    let pdf = lopdf::Document::load_mem(&bytes).unwrap();
+    assert_eq!(pdf.get_pages().len(), 1);
+    let page = pdf.get_pages()[&1];
+    let content = lopdf::content::Content::decode(&pdf.get_page_content(page).unwrap()).unwrap();
+    let rect = content
+        .operations
+        .iter()
+        .find(|op| op.operator == "re")
+        .unwrap();
+    let actual: Vec<_> = rect
+        .operands
+        .iter()
+        .map(|value| value.as_float().unwrap())
+        .collect();
+    let x = (1_234_567_f64 / 12_700.0) as f32;
+    let y = (765_432_f64 / 12_700.0) as f32;
+    let w = (3_456_789_f64 / 12_700.0) as f32;
+    let h = (2_345_678_f64 / 12_700.0) as f32;
+    assert_eq!(actual, [x, 540.0 - y - h, w, h]);
+    assert!(content.operations.iter().any(|op| op.operator == "f"));
+    assert!(w > 0.0 && h > 0.0);
+    let color = &content
+        .operations
+        .iter()
+        .find(|op| op.operator == "rg")
+        .unwrap()
+        .operands;
+    for (actual, channel) in color.iter().zip([32, 96, 208]) {
+        assert!((actual.as_float().unwrap() - channel as f32 / 255.0).abs() < 1e-6);
+    }
+    assert!(
+        convert(&fixture("filled-rectangle.pptx"), &destination)
+            .status
+            .success()
+    );
+    assert_eq!(bytes, fs::read(&destination).unwrap());
+}
+
+#[test]
+fn unsupported_slide_style_is_reported_by_cli() {
+    let directory = TestDirectory::new();
+    let output = convert(
+        &fixture("unsupported-style.pptx"),
+        &directory.0.join("output.pdf"),
+    );
+    assert!(output.status.success());
+    let warnings = String::from_utf8(output.stderr).unwrap();
+    assert!(warnings.contains("Slide 256 (ppt/slides/slide1.xml)"));
+    assert!(warnings.contains("schemeClr"));
+    assert!(warnings.contains("prstDash"));
 }
 
 #[test]

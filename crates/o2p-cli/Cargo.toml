@@ -1,6 +1,6 @@
 [package]
 name = "o2p-cli"
-description = "PDF demo, PPTX inspection and blank-page conversion for ooxml2pdf"
+description = "PDF demo, PPTX inspection and basic slide conversion for ooxml2pdf"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
