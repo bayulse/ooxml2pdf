@@ -1,0 +1,20 @@
+[package]
+name = "o2p-pptx"
+description = "PPTX presentation metadata and blank-page DisplayList conversion"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+o2p-core.workspace = true
+o2p-ooxml.workspace = true
+roxmltree.workspace = true
+
+[dev-dependencies]
+o2p-pdf.workspace = true
+lopdf.workspace = true
+flate2.workspace = true
+crc32fast.workspace = true
+
+[lints]
+workspace = true

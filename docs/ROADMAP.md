@@ -35,18 +35,36 @@ remain bounded in-memory bytes. Inspection reports a package inventory, not
 presentation order; slide content and presentation XML remain unparsed.
 See [ARCHITECTURE.md](ARCHITECTURE.md) for exact contracts and defaults.
 
-## Milestone 1B — PPTX parsing and normalized model (next, not implemented)
+## Milestone 1B — PPTX metadata to blank PDF pages (complete)
 
-Use the package abstraction to parse presentation ordering, slide dimensions
-and the agreed basic slide content. Add a PPTX parser/model without allowing
-format parsing to emit PDF commands. Unsupported Office content must produce
-structured warnings. Keep chart, SmartArt, WordArt and complex-effect support
-outside the initial scope.
+- Add `o2p-pptx` for PresentationML semantics, separate from OPC mechanics.
+- Parse the detected main presentation part, real EMU slide size and ordered
+  slide ID list, supporting Transitional/Strict namespaces.
+- Resolve internal slide relationships in presentation order; never infer
+  ordering from filenames, sorted inventories or relationship-file order.
+- Own normalized `Presentation`, `SlideRef`, `SlideSize`, errors and warnings;
+  expose no XML implementation types.
+- Produce one format-independent blank page per slide reference, using points,
+  then pass the DisplayList to the unchanged PDF backend.
+- Add `o2p convert <input.pptx> -o <output.pdf>`; keep `inspect` and `demo` working.
+- Leave all slide contents opaque and return structured warnings for omitted
+  rendering and unsupported presentation metadata.
+- Add bounded XML parsing with a private `roxmltree` adapter
+  (`MIT OR Apache-2.0`), DTD rejection, node/byte/slide limits and a depth
+  preflight before recursive tree construction.
+- Add deterministic standard/widescreen/reordered/invalid-size/deep-nesting
+  fixtures, parser tests and independent PDF/CLI integration tests.
+
+The first end-to-end pipeline is now PPTX -> OPC package -> presentation model
+-> blank core Pages / DisplayList -> existing PDF renderer -> PDF. Slide content
+is intentionally not rendered. Empty slide-reference lists are rejected. See
+[ARCHITECTURE.md](ARCHITECTURE.md) for contracts, units, warnings and limits.
 
 ## Milestone 1C — PPTX layout to DisplayList (planned)
 
-Lay out the normalized slide model into the common DisplayList and integrate
-with the existing PDF backend. Add rendering regression fixtures for text,
+Extend PPTX parsing with the agreed basic slide content, normalize it, and lay
+it out into the common DisplayList using the existing PDF backend. Add
+rendering regression fixtures for text,
 images, rectangles, ellipses, lines, fills and borders. Extend shared primitives
 only as needed for demonstrated rendering behaviors.
 

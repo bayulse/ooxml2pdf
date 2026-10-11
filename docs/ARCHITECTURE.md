@@ -13,7 +13,7 @@ AGENTS.md applies to later work; Milestone 0 establishes the shared output path.
 
 ## Workspace and dependency direction
 
-The root is a virtual Cargo workspace with exactly three members:
+At Milestone 0, the root became a virtual Cargo workspace with three members:
 
 | Crate | Responsibility | Production dependencies |
 | --- | --- | --- |
@@ -280,3 +280,132 @@ metadata, paths, detection, inventories, missing targets, ZIP corruption,
 resource limits, descriptors and hostile compressed streams, plus malformed
 input mutation/truncation cases and CLI behavior. This is not a formal security
 proof or a substitute for a future sustained fuzzing campaign.
+
+# Milestone 1B: PPTX metadata to blank PDF pages
+
+Milestones 0 and 1A remain unchanged. The workspace adds `o2p-pptx`, and the CLI
+orchestrates the first complete input-to-output path:
+
+```text
+real PPTX -> o2p-ooxml package -> o2p-pptx metadata / normalized Presentation
+          -> o2p-core DisplayList with blank Pages -> o2p-pdf -> PDF bytes
+```
+
+| Crate | Responsibility | Production dependencies |
+| --- | --- | --- |
+| `o2p-ooxml` | ZIP / OPC mechanics, parts, content types and resolved relationships | `flate2`, `crc32fast` |
+| `o2p-pptx` | PresentationML size, slide references, ordered model and blank pages | `o2p-ooxml`, `o2p-core`, `roxmltree` |
+| `o2p-core` | Format-independent geometry, pages and drawing operations | None |
+| `o2p-pdf` | Validate DisplayList and produce PDF bytes | `o2p-core`, `pdf-writer` |
+| `o2p-cli` | Open input, parse, convert, render, report warnings and write output | The four workspace libraries |
+
+The package inspection API still identifies PPTX by its package-level
+`officeDocument` relationship and main-part content type. `Presentation::parse`
+uses that main part (normally `ppt/presentation.xml`), without assuming its
+location. No package-layer behavior changes are required. Inspection continues
+to report sorted inventories, including orphan parts; conversion uses ordered
+slide references instead.
+
+## Normalized model and ordering
+
+`Presentation::parse(&OoxmlPackage, ParseLimits)` returns an owned model with
+private fields and read-only getters:
+
+- `SlideSize` preserves integer width/height in EMUs. `to_points()` returns
+  the common `Size`. Conversion divides by 12,700 in `f64`, then rounds once
+  to the core's `f32` points (914,400 EMUs per inch / 72 points per inch).
+- `SlideRef` owns its numeric slide ID and canonical resolved part name.
+- `Presentation` owns the global size, ordered references and structured
+  `PptxWarning` values. It outlives the package and XML parser.
+
+The namespace-aware parser supports Transitional and Strict PresentationML and
+office-document relationship URIs. It reads direct `sldSz` and `sldIdLst`
+children of `presentation`, then resolves each namespaced `r:id` against the
+main part's relationships in **slide-list order**. Relationship-file order,
+numeric slide IDs, filename numbering and sorted inventories do not determine
+page order. Targets must be internal relationships of type `slide`, pointing
+to parts with the PresentationML slide content type. External targets are
+never fetched. Unreferenced slides do not produce pages.
+
+Missing/duplicate size or slide lists, missing required attributes, invalid
+integers, duplicate numeric IDs or relationship references, nested/text content
+in supported metadata, and bad slide relationships return owned `PptxError`
+values. Slide dimensions must lie within the OOXML slide-size range of
+914,400–51,206,400 EMUs, and slide IDs within 256–2,147,483,647. The size preset
+`type` does not override `cx`/`cy`. This is a supported metadata subset, not full
+OOXML schema validation. Presentations without slide references are rejected
+explicitly, because the existing PDF renderer requires at least one page.
+
+`to_blank_display_list()` iterates the normalized slide vector and produces
+exactly one `Page { size, ops: vec![] }` per reference. Page index corresponds
+to the same slide-reference index; hidden slides are included because slide
+content is not examined. With identical blank pages, slide identity cannot be
+distinguished visually in the PDF. Ordering is verified in the normalized model
+and CLI warning sequence; the backend's existing page-order contract is used.
+No PPTX type, XML tree, or format-specific command enters `o2p-pdf`.
+
+## Opaque content, warnings and parser security
+
+No slide bytes are interpreted. Text, images, shapes, themes, masters, layouts,
+charts, SmartArt, animations and other slide features remain opaque. Every
+referenced slide yields `SlideContentNotRendered { slide_id, part }`, including
+empty slides. Other presentation elements/subtrees and unrecognized attributes
+yield `UnsupportedPresentationMetadata { part, name }`. Their contents are not
+interpreted, and warnings do not claim a content compatibility scan. Diagnostic
+namespace/local names are clipped to 160 characters each to avoid copying large
+shared namespace bindings into every warning. Malformed presentation XML is an
+error, even in an unsupported subtree; slide XML is not parsed or validated.
+
+`roxmltree` 0.21.1 is a maintained, pure-Rust read-only XML parser, licensed
+`MIT OR Apache-2.0`; its installed manifest declares Rust 1.60 compatibility.
+It provides namespace resolution, grammar validation, predefined/numeric
+entities and a node limit. It is isolated in `o2p-pptx`'s private XML adapter;
+no parser types/errors enter the public model/API. Its default features add
+no runtime services. ZIP/OPC parsing remains in its existing adapters.
+
+The adapter accepts XML 1.0 in UTF-8 (optional BOM), or UTF-16 LE/BE with BOM;
+declarations must agree with the supported encoding. All DTDs, including empty
+ones, are rejected, and no entity resolver is supplied. The XML tree builder
+uses recursion: an iterative lexical preflight checks nesting **before** tree
+parsing. Both self-closing and paired tags count toward depth; comments,
+processing instructions, CDATA and quoted tag attributes are skipped correctly.
+The tree parser then validates XML grammar and namespace bindings.
+
+Default `ParseLimits` are independent of package limits:
+
+| Limit | Default |
+| --- | --- |
+| Raw and decoded presentation XML bytes | 4 MiB |
+| XML nodes | 100,000 |
+| XML element depth | 64 |
+| Referenced slides / generated pages | 10,000 |
+
+The depth option can lower the adapter's hard ceiling of 64, but cannot raise
+it; this protects recursive parser stack usage even with caller-supplied limits.
+Other limits are configurable. No recursive package traversal is introduced.
+Parts, the bounded XML tree, normalized model, DisplayList and PDF remain
+in-memory; these bounds are not an exact heap-usage budget.
+
+## CLI and validation
+
+```sh
+cargo run -p o2p-cli -- convert fixtures/pptx/three-slides-16x9.pptx -o target/three-slides.pdf
+```
+
+This writes three blank 960 × 540 point pages (13⅓ × 7½ inches). Standard 4:3
+fixtures produce 720 × 540 point pages. Warnings go to stderr; success reports
+the output path and blank page count on stdout. Input/parsing/rendering failures
+return nonzero before touching output. As with `demo`, an existing destination
+is overwritten after successful parsing/rendering, its parents must exist,
+and write errors return nonzero. OS-native path arguments are preserved.
+`demo` and `inspect` retain their behavior.
+
+The new deterministic fixture generator reuses Milestone 1A's test-only ZIP
+builder and leaves its fixtures intact. Tests cover EMUs, both sizes, namespace
+handling, UTF-8/UTF-16, relationship order/types, relocated main parts, orphan
+slides, opaque slide bytes, warnings, malformed metadata/XML, hostile nesting
+and configurable limits. Independently parsed PDFs verify exact page counts,
+MediaBoxes and empty content streams. CLI tests cover conversion, warnings in
+presentation order, deterministic overwrites, help, errors and preservation of
+existing output on input failure. A deeply nested presentation is a regression
+fixture for rejection before recursive tree parsing.

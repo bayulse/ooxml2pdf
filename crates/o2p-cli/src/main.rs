@@ -2,18 +2,32 @@ use std::{env, ffi::OsString, fs, path::PathBuf, process::ExitCode};
 
 use o2p_core::{Color, DisplayList, DrawOp, Font, LineOp, Page, Point, Rect, RectOp, Size, TextOp};
 
-const USAGE: &str =
-    "Usage: o2p demo <output.pdf>\n       o2p inspect <file.pptx>\n       o2p --help";
+const USAGE: &str = "Usage: o2p demo <output.pdf>\n       o2p inspect <file.pptx>\n       o2p convert <input.pptx> -o <output.pdf>\n       o2p --help\n\nPPTX conversion currently produces blank pages; slide content is not rendered.";
 
 enum Command {
     Demo(PathBuf),
     Inspect(PathBuf),
+    Convert { input: PathBuf, output: PathBuf },
     Help,
 }
 
 fn parse_args(args: impl IntoIterator<Item = OsString>) -> Result<Command, &'static str> {
     let mut args = args.into_iter();
-    match (args.next(), args.next(), args.next()) {
+    let first = args.next();
+    if first.as_deref() == Some(std::ffi::OsStr::new("convert")) {
+        return match (args.next(), args.next(), args.next(), args.next()) {
+            (Some(input), Some(flag), Some(output), None)
+                if !input.is_empty() && flag == "-o" && !output.is_empty() =>
+            {
+                Ok(Command::Convert {
+                    input: input.into(),
+                    output: output.into(),
+                })
+            }
+            _ => Err(USAGE),
+        };
+    }
+    match (first, args.next(), args.next()) {
         (Some(command), None, None) if command == "--help" || command == "-h" => Ok(Command::Help),
         (Some(command), Some(path), None) if command == "demo" && !path.is_empty() => {
             Ok(Command::Demo(path.into()))
@@ -78,6 +92,41 @@ fn main() -> ExitCode {
     };
     match command {
         Command::Help => println!("{USAGE}"),
+        Command::Convert { input, output } => {
+            let presentation =
+                match o2p_ooxml::OoxmlPackage::open(&input, o2p_ooxml::SecurityLimits::default()) {
+                    Ok(package) => {
+                        o2p_pptx::Presentation::parse(&package, o2p_pptx::ParseLimits::default())
+                    }
+                    Err(error) => Err(error.into()),
+                };
+            let presentation = match presentation {
+                Ok(presentation) => presentation,
+                Err(error) => {
+                    eprintln!("Cannot convert {}: {error}", input.display());
+                    return ExitCode::FAILURE;
+                }
+            };
+            let bytes = match o2p_pdf::render(&presentation.to_blank_display_list()) {
+                Ok(bytes) => bytes,
+                Err(error) => {
+                    eprintln!("PDF rendering failed: {error}");
+                    return ExitCode::FAILURE;
+                }
+            };
+            if let Err(error) = fs::write(&output, bytes) {
+                eprintln!("Cannot write {}: {error}", output.display());
+                return ExitCode::FAILURE;
+            }
+            for warning in presentation.warnings() {
+                eprintln!("Warning: {warning}");
+            }
+            println!(
+                "Wrote {} ({} blank pages)",
+                output.display(),
+                presentation.slides().len()
+            );
+        }
         Command::Inspect(path) => {
             let inspection =
                 match o2p_ooxml::OoxmlPackage::open(&path, o2p_ooxml::SecurityLimits::default())
@@ -135,6 +184,19 @@ mod tests {
             parse_args(["inspect".into(), "file.pptx".into()]),
             Ok(Command::Inspect(_))
         ));
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn convert_preserves_non_utf8_path_arguments() {
+        use std::os::unix::ffi::OsStringExt;
+        let input = OsString::from_vec(b"input-\xff.pptx".to_vec());
+        let output = OsString::from_vec(b"output-\xfe.pdf".to_vec());
+        assert!(
+            matches!(parse_args(["convert".into(), input.clone(), "-o".into(), output.clone()]),
+            Ok(Command::Convert { input: parsed_input, output: parsed_output })
+            if parsed_input.as_os_str() == input && parsed_output.as_os_str() == output)
+        );
     }
 
     #[test]

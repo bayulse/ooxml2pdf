@@ -1,0 +1,14 @@
+//! cargo run --offline -p o2p-pptx --example generate_fixtures
+#[path = "../tests/support/mod.rs"]
+mod support;
+
+use std::{fs, path::Path};
+
+fn main() -> std::io::Result<()> {
+    let directory = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../fixtures/pptx");
+    fs::create_dir_all(&directory)?;
+    for (name, parts) in support::fixtures() {
+        fs::write(directory.join(name), support::zip(&parts, true, false))?;
+    }
+    Ok(())
+}
