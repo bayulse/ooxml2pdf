@@ -1,0 +1,17 @@
+[workspace]
+members = ["crates/o2p-core", "crates/o2p-pdf", "crates/o2p-cli"]
+resolver = "3"
+
+[workspace.package]
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.85"
+
+[workspace.dependencies]
+o2p-core = { path = "crates/o2p-core" }
+o2p-pdf = { path = "crates/o2p-pdf" }
+pdf-writer = "0.14"
+lopdf = { version = "0.38", default-features = false }
+
+[workspace.lints.rust]
+unsafe_code = "forbid"

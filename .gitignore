@@ -1,0 +1,38 @@
+# Rust build output
+/target/
+**/*.rs.bk
+
+# Generated / temporary files
+/tmp/
+/temp/
+/out/
+/artifacts/
+*.log
+
+# Local development tools
+.serena/
+.codex/
+.claude/
+
+# Editors
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# Environment / secrets
+.env
+.env.*
+!.env.example
+
+# Private keys / certificates
+*.pem
+*.key
+*.p12
+*.pfx
+
+# OS
+.DS_Store
+Thumbs.db
+Desktop.ini

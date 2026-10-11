@@ -1,0 +1,16 @@
+[package]
+name = "o2p-pdf"
+description = "PDF backend for the ooxml2pdf display list"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+o2p-core.workspace = true
+pdf-writer.workspace = true
+
+[dev-dependencies]
+lopdf.workspace = true
+
+[lints]
+workspace = true

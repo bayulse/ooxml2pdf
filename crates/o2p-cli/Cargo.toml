@@ -1,0 +1,20 @@
+[package]
+name = "o2p-cli"
+description = "DisplayList to PDF demo for ooxml2pdf"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+
+[[bin]]
+name = "o2p"
+path = "src/main.rs"
+
+[dependencies]
+o2p-core.workspace = true
+o2p-pdf.workspace = true
+
+[dev-dependencies]
+lopdf.workspace = true
+
+[lints]
+workspace = true

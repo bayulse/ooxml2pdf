@@ -1,0 +1,9 @@
+[package]
+name = "o2p-core"
+description = "Format-independent display list for ooxml2pdf"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+
+[lints]
+workspace = true
