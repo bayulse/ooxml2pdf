@@ -79,7 +79,10 @@ fn synthetic_fixtures_are_deterministic_and_normalized_models_are_owned() {
         assert_eq!(parsed.slides().len(), parsed.slide_contents().len());
         if name != "unsupported-style.pptx" {
             assert!(
-                parsed.warnings().is_empty(),
+                parsed
+                    .warnings()
+                    .iter()
+                    .all(support::is_missing_layout_warning),
                 "{name}: {:?}",
                 parsed.warnings()
             );
@@ -352,7 +355,7 @@ fn unsupported_shapes_text_styles_and_groups_produce_warnings() {
         (
             base.replace("<p:nvPr/>", "<p:nvPr><p:ph/></p:nvPr>"),
             "placeholder",
-            0,
+            1,
         ),
     ] {
         let model = model("", &shape);

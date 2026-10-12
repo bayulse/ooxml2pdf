@@ -247,7 +247,7 @@ fn alignment_uses_the_combined_unwrapped_line_width() {
 }
 
 #[test]
-fn supported_text_only_shapes_work_without_geometry_or_placeholders_inheritance() {
+fn text_only_placeholders_keep_explicit_geometry_when_layout_is_missing() {
     let shape = text_shape(
         2,
         TEXT_RECT,
@@ -260,8 +260,8 @@ fn supported_text_only_shapes_work_without_geometry_or_placeholders_inheritance(
     let model = parse(&content_deck("", &shape)).unwrap();
     assert_eq!(model.slide_contents()[0].shapes().len(), 1);
     assert_eq!(ops(&model)[0].text, "Explicit position");
-    warning(&model, "text-only shape");
-    warning(&model, "placeholder inheritance");
+    warning(&model, "missing slideLayout relationship");
+    warning(&model, "unmatched placeholder");
 }
 
 #[test]

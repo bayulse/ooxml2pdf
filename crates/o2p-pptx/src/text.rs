@@ -9,6 +9,7 @@ impl Parser<'_> {
         &mut self,
         body: Node<'_, '_>,
         rect: Rect,
+        inherited: Option<&super::PlaceholderTextDefaults>,
     ) -> Result<Option<TextBox>, PptxError> {
         let dml = self.dml;
         self.attributes(body, &[]);
@@ -67,13 +68,16 @@ impl Parser<'_> {
         if let Some(list) = self.single(body, dml, "lstStyle")? {
             self.attributes(list, &[]);
             self.element_only(list)?;
-            self.other_children(list, &[]);
+            if inherited.is_none() {
+                self.other_children(list, &[]);
+            }
         }
-        // Master/layout and implicit font inheritance remain unresolved.
-        self.warn("text inheritance/font resolution: fallback is 18pt regular black sans-serif, left/top aligned with 7.2pt horizontal and 3.6pt vertical insets; direct properties override fallback".into());
+        if inherited.is_none() {
+            self.warn("text inheritance/font resolution: fallback is 18pt regular black sans-serif, left/top aligned with 7.2pt horizontal and 3.6pt vertical insets; direct properties override fallback".into());
+        }
         let mut paragraphs = vec![];
         for paragraph in body.children().filter(|n| n.has_tag_name((dml, "p"))) {
-            paragraphs.push(self.paragraph(paragraph)?);
+            paragraphs.push(self.paragraph(paragraph, inherited)?);
         }
         if paragraphs.is_empty() {
             return Err(self.invalid("txBody must contain a paragraph"));
@@ -85,18 +89,33 @@ impl Parser<'_> {
         }))
     }
 
-    fn paragraph(&mut self, paragraph: Node<'_, '_>) -> Result<Paragraph, PptxError> {
+    fn paragraph(
+        &mut self,
+        paragraph: Node<'_, '_>,
+        inherited: Option<&super::PlaceholderTextDefaults>,
+    ) -> Result<Paragraph, PptxError> {
         let dml = self.dml;
         self.attributes(paragraph, &[]);
         self.element_only(paragraph)?;
         let properties = self.single(paragraph, dml, "pPr")?;
         let end = self.single(paragraph, dml, "endParaRPr")?;
-        let mut default = TextStyle::default();
-        let mut alignment = TextAlignment::Left;
+        let mut default = inherited.map_or_else(TextStyle::default, |d| d.style());
+        let mut alignment = inherited
+            .and_then(|d| d.alignment)
+            .unwrap_or(TextAlignment::Left);
         if let Some(properties) = properties {
-            self.attributes(properties, &["algn"]);
+            self.attributes(properties, &["algn", "lvl"]);
+            if properties.attribute("lvl").is_some() && self.integer(properties, "lvl", 0, 8)? != 0
+            {
+                self.warn(
+                    "paragraph level styles are unsupported: using generic text defaults".into(),
+                );
+                default = TextStyle::default();
+                alignment = TextAlignment::Left;
+            }
             alignment = match properties.attribute("algn") {
-                None | Some("l") => TextAlignment::Left,
+                None => alignment,
+                Some("l") => TextAlignment::Left,
                 Some("ctr") => TextAlignment::Center,
                 Some("r") => TextAlignment::Right,
                 Some(_) => {
@@ -191,7 +210,7 @@ impl Parser<'_> {
         })
     }
 
-    fn text_style(
+    pub(super) fn text_style(
         &mut self,
         node: Node<'_, '_>,
         mut style: TextStyle,

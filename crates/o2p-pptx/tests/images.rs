@@ -48,7 +48,10 @@ fn six_fixtures_are_reproducible_owned_warning_free_and_renderable() {
         );
         let model = parse(&parts).unwrap();
         assert!(
-            model.warnings().is_empty(),
+            model
+                .warnings()
+                .iter()
+                .all(support::is_missing_layout_warning),
             "{name}: {:?}",
             model.warnings()
         );

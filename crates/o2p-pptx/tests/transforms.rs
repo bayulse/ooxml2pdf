@@ -93,7 +93,12 @@ fn parser_preserves_bounds_and_rotates_around_nonzero_element_center() {
             &base.replace("<a:xfrm>", &format!("<a:xfrm rot='{units}'>")),
         ))
         .unwrap();
-        assert!(model.warnings().is_empty());
+        assert!(
+            model
+                .warnings()
+                .iter()
+                .all(support::is_missing_layout_warning)
+        );
         let t = transform(&model);
         assert_point(t.apply(center), center);
         assert_point(t.apply(Point { x: 10.0, y: 20.0 }), expected);
@@ -143,7 +148,13 @@ fn local_flip_axes_precede_rotation_for_shapes_lines_and_pictures() {
                 content_deck("", &xml)
             })
             .unwrap();
-            assert!(model.warnings().is_empty(), "{attrs}");
+            assert!(
+                model
+                    .warnings()
+                    .iter()
+                    .all(support::is_missing_layout_warning),
+                "{attrs}"
+            );
             assert_point(transform(&model).apply(center), center);
             assert_point(
                 transform(&model).apply(Point { x: 10.0, y: 20.0 }),
@@ -169,6 +180,7 @@ fn transform_fixtures_are_reproducible_and_pdf_uses_native_paints_in_xml_order()
                 let message = w.to_string();
                 message.contains("text inheritance/font resolution")
                     || message.contains("legacy text box overflow")
+                    || support::is_missing_layout_warning(w)
             }),
             "{name}: {:?}",
             model.warnings()

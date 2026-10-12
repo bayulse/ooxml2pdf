@@ -226,3 +226,22 @@ cargo run --offline -p o2p-cli -- convert fixtures/pptx/theme-colors-and-fonts.p
 ```
 
 See [THEMES.md](../../docs/THEMES.md) for discovery and fidelity scope.
+# Milestone 1I-B inheritance fixtures
+
+Fourteen minimal synthetic packages extend the existing Rust fixture generator:
+`layout-inherited-position`, `layout-inherited-size`, `master-inherited-position`,
+`inherited-text-style`, `local-overrides-layout`, `local-overrides-master`,
+`master-background`, `master-decorative-shape`, `layout-decorative-shape`,
+`placeholder-no-duplication`, `multiple-placeholders`,
+`malformed-layout-relationship`, `malformed-master-relationship`, and
+`layout-master-inheritance` (all `.pptx`). The malformed fixtures are valid OPC
+packages with inheritance links targeting parts of the wrong content type.
+
+The final deck demonstrates a master background/strip, layout ellipse, inherited
+placeholder geometry/theme styling, and local position/color/font-size overrides.
+Ancestor prompt text must never appear. See [inheritance semantics](../../docs/INHERITANCE.md).
+
+```sh
+cargo run --offline -p o2p-pptx --example generate_fixtures
+cargo run --offline -p o2p-cli -- convert fixtures/pptx/layout-master-inheritance.pptx --font-dir fixtures/fonts -o target/layout-master-inheritance.pdf
+```

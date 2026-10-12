@@ -57,14 +57,16 @@ paragraph defaults are retained. Explicit `+mj-lt` / `+mn-lt` references resolve
 to major/minor Latin families from the presentation theme in `o2p-pptx`, before
 creating a generic requested family. Unsupported aliases or unavailable theme
 families warn and use configured sans-serif. `a:ea` / `a:cs` typeface selection,
-master/layout inheritance, and embedded OOXML fonts remain unsupported and
+full master text-style hierarchies, and embedded OOXML fonts remain unsupported and
 warn. No PPTX XML concepts enter `o2p-fonts` or `o2p-core`.
 
 Theme resolution requests the actual family even if it is unregistered;
 the generic resolver retains its existing `MissingFont` and `Substitution`
 diagnostics and deterministic configured fallback order. Major/minor script
 mappings are preserved in the theme model but do not infer run fonts. Only
-explicit local Latin tokens resolve: absent typefaces keep the generic request.
+explicit Latin tokens resolve, including supported inherited placeholder defaults.
+Absent typefaces use those defaults before the generic request. See
+[INHERITANCE.md](INHERITANCE.md) for Milestone 1I-B's exact precedence and limits.
 The standard-font compatibility path retains Helvetica selection; configured
 fonts are required to render the resolved family. See [THEMES.md](THEMES.md) for
 discovery, aliases, color semantics and unsupported inheritance.

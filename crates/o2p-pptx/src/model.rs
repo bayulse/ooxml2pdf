@@ -53,6 +53,7 @@ pub enum Shape {
 pub struct Slide {
     pub(crate) background: Option<Fill>,
     pub(crate) shapes: Vec<Shape>,
+    pub(crate) placeholders: Vec<crate::Placeholder>,
 }
 
 impl Slide {
@@ -62,6 +63,10 @@ impl Slide {
 
     pub fn shapes(&self) -> &[Shape] {
         &self.shapes
+    }
+    /// Effective placeholder identities/properties, in slide XML order.
+    pub fn placeholders(&self) -> &[crate::Placeholder] {
+        &self.placeholders
     }
 
     pub(crate) fn to_page(&self, size: Size) -> Page {
@@ -170,7 +175,7 @@ fn append_shapes<E>(
 #[derive(Debug, Clone, PartialEq)]
 pub struct TextStyle {
     /// Direct Latin typeface or resolved explicit Latin theme token.
-    /// Absent means configured sans-serif; master/layout inheritance is unresolved.
+    /// Absent means configured sans-serif after supported placeholder inheritance.
     pub family: Option<String>,
     pub font_size: f32,
     pub bold: bool,

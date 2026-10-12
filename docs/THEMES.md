@@ -1,4 +1,4 @@
-# PPTX themes and fidelity — Milestone 1I-A
+# PPTX themes and fidelity — Milestones 1I-A / 1I-B
 
 Baseline: `f392e61`. This milestone resolves directly referenced theme colors and
 explicit Latin theme font tokens. Theme semantics live entirely in `o2p-pptx`.
@@ -13,18 +13,23 @@ internals or filename guesses. Both Transitional and Strict relationship/XML
 namespaces work, including relocated main/theme parts. The target must declare
 `application/vnd.openxmlformats-officedocument.theme+xml`.
 
-Only the presentation's theme relationship is followed. Themes reachable only
-through masters/layouts, per-master theme selection and theme overrides await
-later scoped inheritance work. Unrelated theme parts are ignored. External
+Content parsing also follows slide -> layout -> master and loads the master's
+explicit theme, falling back to the presentation theme. An explicit layout
+theme takes priority for that layout and its slides. All sources use this same
+theme loader and color/font resolver; there is no alternate resolution path.
+Theme overrides remain unsupported. Unrelated theme parts are ignored. External
 themes warn and remain unavailable; nothing is fetched. Multiple presentation
 theme relationships or wrong target content types return `InvalidTheme`.
 Dangling internal targets remain errors from the existing OPC reader.
 
-`Presentation::parse_with_content()` loads the theme once before slide parsing.
+`Presentation::parse_with_content()` loads the presentation theme before content,
+and caches reachable layout/master semantic models during inheritance traversal.
 `Presentation::theme()` exposes an owned optional `Theme`, with `ColorScheme`,
 `FontScheme` and `ThemeFonts`. The model contains concrete core RGB colors,
 owned typeface strings and script mappings, never XML nodes or parser types.
-It outlives the package. Metadata-only `parse()`, blank-page conversion and
+It outlives the package. Layout/master `theme()` getters expose their scoped
+effective theme; `Presentation::theme()` retains its presentation-only contract.
+Metadata-only `parse()`, blank-page conversion and
 `inspect` keep theme bytes opaque, including malformed theme XML.
 
 The existing XML adapter enforces byte/decoded-byte, node and depth ceilings
@@ -105,7 +110,8 @@ specifies preserving hue and saturation for luminance changes.
 mappings are preserved for future selection, not applied to infer run styles.
 
 Explicit `a:latin/@typeface="+mj-lt"` resolves to major Latin; `+mn-lt` resolves
-to minor Latin. This also applies to explicit local paragraph defaults and end
+to minor Latin. This also applies to supported inherited placeholder defaults,
+explicit local paragraph defaults and end
 properties already supported by the text parser. Resolved family names enter
 `TextStyle::family`, then ordinary `FontRequest` -> generic resolver -> shaping
 -> measured layout -> embedded PDF fonts. `o2p-fonts` knows no PPTX theme tokens.
@@ -114,14 +120,16 @@ If the resolved family is unregistered, it is still requested by its real name;
 existing `MissingFont`/`Substitution` diagnostics and configured fallback order
 apply. Missing themes/empty Latin names/unsupported aliases (including `+mj-ea`
 and `+mn-cs`) warn and use the existing generic sans-serif request. Tokens never
-reach the generic resolver as literal family names. Absent run typefaces do not
-automatically acquire major/minor fonts. The unconfigured standard-Helvetica
+reach the generic resolver as literal family names. Absent run typefaces first
+use supported placeholder defaults, then the generic request; major/minor fonts
+are not inferred merely from a placeholder's type. The unconfigured standard-Helvetica
 compatibility path retains its font-selection limits; supply fonts for fidelity.
 
 ## Deferred semantics and validation
 
-No master/layout/placeholder inheritance, inherited backgrounds/text properties,
-theme overrides, style-matrix fill/line/effect/background lists, grouped shapes,
+Basic master/layout/placeholder geometry, paint, text defaults and backgrounds
+are supported by 1I-B; see [INHERITANCE.md](INHERITANCE.md) for precedence and limits.
+Full txStyles, theme overrides, style-matrix fill/line/effect/background lists, grouped shapes,
 charts, SmartArt or animations are implemented. `fmtScheme` and unsupported theme
 subtrees warn at their boundary and remain opaque. DOCX, XLSX and Flutter stay
 outside scope. Existing shape/image/text z-order, wrapping, transforms, Unicode,

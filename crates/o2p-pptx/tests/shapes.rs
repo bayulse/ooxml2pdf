@@ -61,7 +61,13 @@ fn all_shape_fixtures_are_small_reproducible_and_warning_free() {
         .unwrap();
         assert_eq!(bytes, zip(&parts, true, false), "{name}");
         assert!(bytes.len() < 4096);
-        assert!(fixture(name).warnings().is_empty(), "{name}");
+        assert!(
+            fixture(name)
+                .warnings()
+                .iter()
+                .all(support::is_missing_layout_warning),
+            "{name}"
+        );
     }
 }
 
@@ -177,7 +183,12 @@ fn line_flips_handle_both_boolean_spellings_and_signed_positions() {
         (" flipH='false' flipV='0' rot='0'", (-1.0, -2.0), (3.0, 4.0)),
     ] {
         let model = parse(&base.replace("<a:xfrm>", &format!("<a:xfrm{attributes}>"))).unwrap();
-        assert!(model.warnings().is_empty());
+        assert!(
+            model
+                .warnings()
+                .iter()
+                .all(support::is_missing_layout_warning)
+        );
         let (shape, transform) = match &model.slide_contents()[0].shapes()[0] {
             Shape::Transformed { transform, element } => (&element[0], *transform),
             shape => (shape, o2p_core::Transform::IDENTITY),
@@ -417,7 +428,12 @@ fn simple_lines_work_as_shapes_in_strict_namespaces_too() {
     let package =
         OoxmlPackage::from_bytes(&zip(&parts, false, false), SecurityLimits::default()).unwrap();
     let model = Presentation::parse_with_content(&package, ParseLimits::default()).unwrap();
-    assert!(model.warnings().is_empty());
+    assert!(
+        model
+            .warnings()
+            .iter()
+            .all(support::is_missing_layout_warning)
+    );
     assert!(matches!(
         model.slide_contents()[0].shapes(),
         [Shape::Line { .. }]

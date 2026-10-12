@@ -43,6 +43,77 @@ fn convert(input: &Path, output: &Path) -> std::process::Output {
         .unwrap()
 }
 
+fn assert_only_missing_layout_warning(stderr: &[u8]) {
+    let warnings = String::from_utf8_lossy(stderr);
+    assert_eq!(warnings.lines().count(), 1, "{warnings}");
+    assert!(
+        warnings.contains("missing slideLayout relationship"),
+        "{warnings}"
+    );
+}
+
+#[test]
+fn inheritance_cli_embeds_text_preserves_layers_and_fails_before_output_write() {
+    let directory = TestDirectory::new();
+    let destination = directory.0.join("inheritance.pdf");
+    let run = || {
+        Command::new(env!("CARGO_BIN_EXE_o2p"))
+            .arg("convert")
+            .arg(fixture("layout-master-inheritance.pptx"))
+            .arg("--font-dir")
+            .arg(Path::new(env!("CARGO_MANIFEST_DIR")).join("../../fixtures/fonts"))
+            .arg("-o")
+            .arg(&destination)
+            .output()
+            .unwrap()
+    };
+    let output = run();
+    assert!(
+        output.status.success(),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let warnings = String::from_utf8_lossy(&output.stderr);
+    assert!(!warnings.contains("missing slideLayout") && !warnings.contains("missing slideMaster"));
+    assert!(!warnings.contains("unresolved") && !warnings.contains("MissingFont"));
+    let bytes = fs::read(&destination).unwrap();
+    assert!(run().status.success());
+    assert_eq!(fs::read(&destination).unwrap(), bytes);
+    let pdf = lopdf::Document::load_mem(&bytes).unwrap();
+    let extracted = pdf.extract_text(&[1]).unwrap();
+    assert!(
+        extracted.contains("Layout and master inheritance") && extracted.contains("Local override")
+    );
+    assert!(!extracted.contains("sample"));
+    assert!(bytes.windows(10).any(|w| w == b"/FontFile2"));
+    assert!(bytes.windows(10).any(|w| w == b"/ToUnicode"));
+    let content =
+        lopdf::content::Content::decode(&pdf.get_page_content(pdf.get_pages()[&1]).unwrap())
+            .unwrap();
+    assert!(
+        content
+            .operations
+            .iter()
+            .filter(|op| op.operator == "re")
+            .count()
+            >= 3
+    );
+    assert!(content.operations.iter().any(|op| op.operator == "c"));
+    for name in [
+        "malformed-layout-relationship.pptx",
+        "malformed-master-relationship.pptx",
+    ] {
+        assert!(!convert(&fixture(name), &destination).status.success());
+        assert_eq!(fs::read(&destination).unwrap(), bytes);
+        let inspection = Command::new(env!("CARGO_BIN_EXE_o2p"))
+            .arg("inspect")
+            .arg(fixture(name))
+            .output()
+            .unwrap();
+        assert!(inspection.status.success());
+    }
+}
+
 #[test]
 fn theme_cli_renders_palette_embedded_font_and_preserves_output_on_bad_theme() {
     let directory = TestDirectory::new();
@@ -353,7 +424,10 @@ fn conversion_preserves_deterministic_blank_pages_with_correct_dimensions() {
         {
             assert_eq!(warnings.matches("clrMapOvr").count(), count);
             if name == "reordered-slides.pptx" {
-                let order: Vec<_> = warnings.lines().collect();
+                let order: Vec<_> = warnings
+                    .lines()
+                    .filter(|line| line.contains("clrMapOvr"))
+                    .collect();
                 assert!(order[0].contains("slide3.xml"));
                 assert!(order[1].contains("slide1.xml"));
                 assert!(order[2].contains("slide2.xml"));
@@ -425,7 +499,7 @@ fn filled_rectangle_conversion_contains_visible_fill_with_correct_geometry() {
         "{}",
         String::from_utf8_lossy(&output.stderr)
     );
-    assert!(output.stderr.is_empty());
+    assert_only_missing_layout_warning(&output.stderr);
     assert!(String::from_utf8_lossy(&output.stdout).contains("1 pages"));
     let bytes = fs::read(&destination).unwrap();
     let pdf = lopdf::Document::load_mem(&bytes).unwrap();
@@ -543,7 +617,7 @@ fn convert_mixed_shapes_renders_rectangle_ellipse_and_line_in_order() {
         "{}",
         String::from_utf8_lossy(&output.stderr)
     );
-    assert!(output.stderr.is_empty());
+    assert_only_missing_layout_warning(&output.stderr);
     assert!(String::from_utf8_lossy(&output.stdout).contains("1 pages"));
     let bytes = fs::read(&destination).unwrap();
     let pdf = lopdf::Document::load_mem(&bytes).unwrap();
@@ -634,7 +708,7 @@ fn image_with_shapes_cli_conversion_contains_raster_and_vector_in_order() {
             String::from_utf8_lossy(&output.stderr)
         );
         if name != "one-image.pptx" {
-            assert!(output.stderr.is_empty());
+            assert_only_missing_layout_warning(&output.stderr);
         } else {
             assert!(String::from_utf8_lossy(&output.stderr).contains("hyperlink"));
         }

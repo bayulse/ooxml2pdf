@@ -5,8 +5,12 @@
 //! No PDF commands or external loading occur.
 
 mod font_layout;
+mod inheritance;
 mod model;
 pub use font_layout::{FontDisplayReport, TextLayoutWarning, TextLayoutWarningKind};
+pub use inheritance::{
+    Placeholder, PlaceholderGeometry, PlaceholderTextDefaults, SlideLayout, SlideMaster,
+};
 mod slide;
 mod theme;
 mod theme_xml;
@@ -219,6 +223,8 @@ pub struct Presentation {
     warnings: Vec<PptxWarning>,
     contents: Vec<Slide>,
     theme: Option<Theme>,
+    layouts: Vec<SlideLayout>,
+    masters: Vec<SlideMaster>,
 }
 
 impl Presentation {
@@ -274,6 +280,8 @@ impl Presentation {
             warnings,
             contents: vec![],
             theme: None,
+            layouts: vec![],
+            masters: vec![],
         })
     }
 
@@ -286,37 +294,20 @@ impl Presentation {
         let mut presentation = Self::parse(package, limits)?;
         let main = package.inspect_pptx()?.presentation_part;
         presentation.theme = theme_xml::load(package, &main, limits, &mut presentation.warnings)?;
-        let mut images = BTreeMap::new();
         presentation
             .warnings
             .retain(|warning| !matches!(warning, PptxWarning::SlideContentNotRendered { .. }));
+        let mut reader = inheritance::Reader::new(
+            package,
+            limits,
+            &mut presentation.warnings,
+            presentation.theme.as_ref(),
+        );
         for reference in &presentation.slides {
-            let content = slide::parse(
-                package,
-                &mut images,
-                package.part(reference.part_name())?.bytes(),
-                reference,
-                limits,
-                &mut presentation.warnings,
-                presentation.theme.as_ref(),
-            )?;
-            presentation.contents.push(content);
-            for relationship in package.relationships(Some(reference.part_name()))? {
-                if slide::is_image_relationship(&relationship.relationship_type) {
-                    continue;
-                }
-                presentation
-                    .warnings
-                    .push(PptxWarning::UnsupportedSlideContent {
-                        slide_id: reference.id(),
-                        part: reference.part_name().into(),
-                        name: format!(
-                            "slide relationship {}",
-                            xml::expanded(None, &relationship.relationship_type)
-                        ),
-                    });
-            }
+            presentation.contents.push(reader.slide(reference)?);
         }
+        presentation.layouts = reader.layouts.into_values().collect();
+        presentation.masters = reader.masters.into_values().collect();
         Ok(presentation)
     }
 
@@ -329,8 +320,17 @@ impl Presentation {
     pub fn theme(&self) -> Option<&Theme> {
         self.theme.as_ref()
     }
+    /// Reachable parsed layouts, sorted by canonical part name.
+    pub fn slide_layouts(&self) -> &[SlideLayout] {
+        &self.layouts
+    }
+    /// Reachable parsed masters, sorted by canonical part name.
+    pub fn slide_masters(&self) -> &[SlideMaster] {
+        &self.masters
+    }
 
-    /// Paint backgrounds first, then shapes in XML order. Metadata-only models
+    /// Paint effective backgrounds, master decorations, layout decorations,
+    /// then slide shapes; retain XML order within each layer. Metadata-only models
     /// produce blank pages and retain their existing unrendered-content warnings.
     pub fn to_display_list(&self) -> DisplayList {
         if self.contents.is_empty() {

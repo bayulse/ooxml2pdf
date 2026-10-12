@@ -1,7 +1,7 @@
 This document records completed milestones chronologically. Milestone 1G-B
 describes the current configured-font layout path and the final Milestone 1H
 section adds individual element transforms. Milestone 1I-A below adds explicit
-theme resolution; earlier standard-font descriptions
+theme resolution; Milestone 1I-B adds structural inheritance. Earlier standard-font descriptions
 remain the compatibility-path history.
 
 # Milestone 0: Common DisplayList to PDF
@@ -1152,3 +1152,27 @@ placeholder properties, or interpret the style matrix. See [THEMES.md](THEMES.md
 for supported slots/transforms, priority, errors, fallbacks, discovery limits and
 deferred semantics. Ten synthetic fixtures and parser/math/font/PDF/CLI tests
 extend completed-milestone regressions.
+
+# Milestone 1I-B: Slide, layout and master inheritance
+
+Baseline: committed `578453b`. The new fixed-depth semantic stage follows
+slide -> layout -> master -> theme through existing OPC relationships. Owned
+`SlideLayout`, `SlideMaster` and `Placeholder` values retain sparse geometry/text
+properties and separate ancestor decorations from placeholder content. Layouts
+merge master defaults, then slides merge layouts, with local properties always
+winning. Only effective normalized `Slide`/`Shape`/`TextStyle` values proceed to
+generic layout, DisplayList and the unchanged PDF backend.
+
+Shared sources and image resources are cached per presentation; bounded XML
+parsing applies independently to each reachable part. Missing links warn; invalid
+discovered links fail. Effective background precedes master decorations, layout
+decorations and slide content, preserving XML order within each layer. Ancestor
+placeholder prompts never render. Common shape visibility controls are supported.
+Per-master themes use the existing centralized resolver; no dependency or generic
+rendering changes are introduced.
+
+See [INHERITANCE.md](INHERITANCE.md) for exact matching, sparse-property precedence,
+source model APIs, theme selection, visibility, background rules and limitations.
+The full txStyles hierarchy and DrawingML style matrix remain deferred to later
+milestones. Required missing-layout warnings are now present for earlier decks
+without layouts; their deterministic rendering contracts remain unchanged.

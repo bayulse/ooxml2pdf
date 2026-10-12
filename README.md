@@ -10,6 +10,15 @@ backgrounds and rectangles with solid fills or basic outlines. Milestone 1D adds
 ellipses and straight lines with explicit solid strokes. Milestone 1E adds
 embedded PNG/JPEG pictures in slide paint order.
 
+Milestone 1I-B adds slide/layout/master traversal, basic placeholder geometry and
+text/paint inheritance, solid inherited backgrounds, and decorative source layers.
+See [inheritance rules and limits](docs/INHERITANCE.md). The existing Unicode,
+wrapping, transform, theme and embedded-font paths remain in use.
+
+```sh
+cargo run --offline -p o2p-cli -- convert fixtures/pptx/layout-master-inheritance.pptx --font-dir fixtures/fonts -o target/layout-master-inheritance.pdf
+```
+
 Generate the deterministic demo:
 
 ```sh

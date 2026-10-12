@@ -1,6 +1,9 @@
 //! PresentationML/DrawingML semantics, isolated from OPC and PDF rendering.
+#[path = "placeholder.rs"]
+mod placeholder;
 #[path = "text.rs"]
 mod text;
+use crate::inheritance::{Placeholder, PlaceholderTextDefaults, Source};
 use o2p_core::{ImageFormat, ImageOp, ImageResource, Point, Rect, Size, Transform};
 use o2p_ooxml::{OoxmlPackage, RelationshipTarget};
 use roxmltree::Node;
@@ -26,6 +29,13 @@ pub(super) fn is_image_relationship(kind: &str) -> bool {
     )
 }
 
+pub(super) struct ParseSource<'a> {
+    pub root: &'a str,
+    pub parents: &'a [Placeholder],
+    pub master_matching: bool,
+    pub theme: Option<&'a crate::Theme>,
+}
+
 pub(super) fn parse(
     package: &OoxmlPackage,
     images: &mut BTreeMap<String, Arc<ImageResource>>,
@@ -33,15 +43,15 @@ pub(super) fn parse(
     reference: &SlideRef,
     limits: ParseLimits,
     warnings: &mut Vec<PptxWarning>,
-    theme: Option<&crate::Theme>,
-) -> Result<Slide, PptxError> {
+    source: ParseSource<'_>,
+) -> Result<Source, PptxError> {
     xml::with_document(bytes, reference.part_name(), limits, |document| {
         let root = document.root_element();
         let pml = root.tag_name().namespace().unwrap_or("");
-        if root.tag_name().name() != "sld" || !matches!(pml, PML | STRICT_PML) {
+        if root.tag_name().name() != source.root || !matches!(pml, PML | STRICT_PML) {
             return Err(PptxError::InvalidSlide {
                 part: reference.part_name().into(),
-                message: "expected PresentationML sld root".into(),
+                message: format!("expected PresentationML {} root", source.root),
             });
         }
         let mut parser = Parser {
@@ -49,23 +59,37 @@ pub(super) fn parse(
             images,
             reference,
             warnings,
-            theme,
+            theme: source.theme,
             pml,
             dml: if pml == PML { DML } else { STRICT_DML },
         };
         let mut slide = Slide {
             background: None,
             shapes: vec![],
+            placeholders: vec![],
         };
-        parser.attributes(root, &["show", "showMasterSp", "showMasterPhAnim"]);
-        for attr in ["showMasterSp", "showMasterPhAnim"] {
-            if root.attribute(attr).is_some() {
-                parser.warn(format!("{attr}: master content is not resolved"));
-            }
+        let mut placeholders = vec![];
+        let mut background_present = false;
+        parser.attributes(
+            root,
+            &[
+                "show",
+                "showMasterSp",
+                "showMasterPhAnim",
+                "type",
+                "preserve",
+                "matchingName",
+                "userDrawn",
+            ],
+        );
+        let show_master_shapes = parser.boolean(root, "showMasterSp")?.unwrap_or(true);
+        if root.attribute("showMasterPhAnim").is_some() {
+            parser.warn("showMasterPhAnim: placeholder animations are unsupported".into());
         }
         if let Some(common) = parser.single(root, pml, "cSld")? {
             parser.attributes(common, &["name"]);
             if let Some(bg) = parser.single(common, pml, "bg")? {
+                background_present = true;
                 parser.attributes(bg, &[]);
                 if let Some(properties) = parser.single(bg, pml, "bgPr")? {
                     parser.attributes(properties, &[]);
@@ -82,7 +106,13 @@ pub(super) fn parse(
                         ],
                     );
                 }
-                parser.other_children(bg, &[(pml, "bgPr")]);
+                if parser.single(bg, pml, "bgRef")?.is_some() {
+                    parser.warn(
+                        "bgRef: style-matrix background resolution deferred to Milestone 1I-C"
+                            .into(),
+                    );
+                }
+                parser.other_children(bg, &[(pml, "bgPr"), (pml, "bgRef")]);
             }
             if let Some(tree) = parser.single(common, pml, "spTree")? {
                 parser.attributes(tree, &[]);
@@ -105,7 +135,22 @@ pub(super) fn parse(
                                 }
                             }
                             (Some(ns), "sp" | "cxnSp") if ns == pml => {
-                                slide.shapes.extend(parser.shape(node)?);
+                                if let Some(mut ph) =
+                                    parser.placeholder(node, source.root != "sld")?
+                                {
+                                    match crate::inheritance::matching(&ph, source.parents, source.master_matching) {
+                                        Ok(Some(parent)) => ph.properties.inherit(&parent.properties),
+                                        Ok(None) if source.root != "sldMaster" => parser.warn(format!("unmatched placeholder {} idx {:?}: using available local properties", xml::expanded(None, &ph.kind), ph.idx)),
+                                        Ok(None) => {},
+                                        Err(()) => parser.warn(format!("ambiguous placeholder {} idx {:?}: inheritance omitted", xml::expanded(None, &ph.kind), ph.idx)),
+                                    }
+                                    if source.root == "sld" && !parser.hidden_shape(node)? {
+                                        slide.shapes.extend(parser.placeholder_shapes(node, &ph)?);
+                                    }
+                                    placeholders.push(ph);
+                                } else if !parser.hidden_shape(node)? {
+                                    slide.shapes.extend(parser.shape(node)?);
+                                }
                             }
                             (Some(ns), "nvGrpSpPr" | "grpSpPr") if ns == pml => {}
                             _ => parser.unsupported(node),
@@ -116,7 +161,12 @@ pub(super) fn parse(
             parser.other_children(common, &[(pml, "bg"), (pml, "spTree")]);
         }
         parser.other_children(root, &[(pml, "cSld")]);
-        Ok(slide)
+        Ok(Source {
+            slide,
+            placeholders,
+            background_present,
+            show_master_shapes,
+        })
     })
 }
 
@@ -144,9 +194,9 @@ impl Parser<'_> {
                 &[(pml, "cNvPr"), (pml, "cNvPicPr"), (pml, "nvPr")],
             );
             if let Some(properties) = self.single(nonvisual, pml, "cNvPr")? {
-                self.attributes(properties, &["id", "name", "descr", "title"]);
+                self.attributes(properties, &["id", "name", "descr", "title", "hidden"]);
                 self.other_children(properties, &[]);
-                if properties.attribute("hidden").is_some() {
+                if self.boolean(properties, "hidden")? == Some(true) {
                     self.warn("hidden picture: picture omitted".into());
                     return Ok(None);
                 }
@@ -742,7 +792,7 @@ impl Parser<'_> {
         if let Some(body) = text_body {
             if connector {
                 self.warn("connector text is not rendered".into());
-            } else if let Some(text) = self.text_box(body, rect)? {
+            } else if let Some(text) = self.text_box(body, rect, None)? {
                 if text.layout().1 {
                     self.warn("legacy text box overflow: unwrapped text exceeds the inner box; configured-font overflow is reported after wrapping".into());
                 }

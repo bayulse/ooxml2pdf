@@ -13,6 +13,12 @@ pub const WIDE_SIZE: &str = "<p:sldSz cx='12192000' cy='6858000' type='screen16x
 
 pub type Parts = Vec<(String, Vec<u8>)>;
 
+/// Old primitive-only fixtures intentionally have no layout; all other warnings
+/// must still be checked by their original rendering regression tests.
+pub fn is_missing_layout_warning(warning: &o2p_pptx::PptxWarning) -> bool {
+    matches!(warning, o2p_pptx::PptxWarning::UnsupportedSlideContent { name, .. } if name == "missing slideLayout relationship: inheritance unavailable")
+}
+
 pub fn presentation(inner: &str) -> Vec<u8> {
     format!("<p:presentation xmlns:p='{PML}' xmlns:r='{OFFICE_RELS}'>{inner}</p:presentation>")
         .into_bytes()
@@ -96,6 +102,10 @@ pub const DML: &str = "http://schemas.openxmlformats.org/drawingml/2006/main";
 mod themes;
 #[allow(unused_imports)]
 pub use themes::*;
+#[path = "inheritance.rs"]
+mod inheritance;
+#[allow(unused_imports)]
+pub use inheritance::*;
 pub const NONTRIVIAL_RECT: (i64, i64, i64, i64) = (1_234_567, 765_432, 3_456_789, 2_345_678);
 
 pub fn solid(color: &str) -> String {

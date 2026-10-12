@@ -283,6 +283,26 @@ deferred. This milestone resolves explicit theme references only. DOCX/XLSX,
 Flutter, charts, SmartArt and animations remain outside scope. See
 [THEMES.md](THEMES.md) for exact semantics and fidelity limits.
 
+## Milestone 1I-B — Slide/layout/master structural inheritance (complete)
+
+Baseline: `578453b`.
+
+- Traverse slide/layout/master/theme relationships through the existing OPC APIs.
+- Own sparse placeholder geometry/text defaults and source decorations.
+- Match placeholders by idx and conservative compatible types; diagnose ambiguity.
+- Resolve slide -> layout -> master -> fallback per property, including partial geometry.
+- Inherit solid backgrounds, fill/outline and basic font/paragraph properties.
+- Layer master decorations, layout decorations and slide content deterministically.
+- Honor showMasterSp and hidden visuals without duplicating ancestor placeholder prompts.
+- Reuse theme/font/layout/PDF paths and all dependencies.
+- Add fourteen synthetic fixtures, inheritance/security/PDF/CLI regressions and
+  the `layout-master-inheritance.pptx` end-to-end demonstration.
+
+Exact contracts and deferred behavior are in [INHERITANCE.md](INHERITANCE.md).
+Milestone 1I-C will address the DrawingML style matrix; full txStyles, grouped
+shapes, charts, SmartArt, notes/comments, animations, DOCX/XLSX and Flutter remain
+outside this milestone.
+
 ## Validation
 
 ```sh
