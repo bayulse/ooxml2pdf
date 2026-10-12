@@ -169,8 +169,8 @@ fn append_shapes<E>(
 /// Resolved basic run properties; all sizes use points.
 #[derive(Debug, Clone, PartialEq)]
 pub struct TextStyle {
-    /// Direct DrawingML latin typeface; absent means configured sans-serif.
-    /// Theme/master/layout font inheritance is not resolved.
+    /// Direct Latin typeface or resolved explicit Latin theme token.
+    /// Absent means configured sans-serif; master/layout inheritance is unresolved.
     pub family: Option<String>,
     pub font_size: f32,
     pub bold: bool,

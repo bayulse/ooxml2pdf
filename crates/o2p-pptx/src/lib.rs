@@ -8,7 +8,10 @@ mod font_layout;
 mod model;
 pub use font_layout::{FontDisplayReport, TextLayoutWarning, TextLayoutWarningKind};
 mod slide;
+mod theme;
+mod theme_xml;
 mod xml;
+pub use theme::{ColorScheme, FontScheme, Theme, ThemeColorSlot, ThemeFonts};
 
 pub use model::{
     Fill, Paragraph, Shape, Slide, Stroke, TextAlignment, TextBox, TextInsets, TextRun, TextStyle,
@@ -47,6 +50,11 @@ impl Default for ParseLimits {
 /// Owned errors. XML implementation types never cross the public boundary.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum PptxError {
+    /// A discovered theme contains invalid supported semantics or relationships.
+    InvalidTheme {
+        part: String,
+        message: String,
+    },
     Package(PackageError),
     InvalidXml {
         part: String,
@@ -73,6 +81,7 @@ pub enum PptxError {
 impl fmt::Display for PptxError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
+            Self::InvalidTheme { part, message } => write!(f, "Invalid theme in {part}: {message}"),
             Self::Package(error) => write!(f, "{error}"),
             Self::InvalidXml { part, message } => write!(f, "Invalid XML in {part}: {message}"),
             Self::InvalidMetadata { part, message } => {
@@ -114,6 +123,8 @@ impl From<PackageError> for PptxError {
 /// Unsupported metadata and slide features in the implemented parsing subset.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum PptxWarning {
+    /// A theme resource or definition is outside the supported semantic subset.
+    UnsupportedTheme { part: String, name: String },
     /// Metadata-only parsing warns for every reference, including empty slides.
     SlideContentNotRendered { slide_id: u32, part: String },
     /// An element or attribute outside the supported metadata subset is opaque.
@@ -129,6 +140,7 @@ pub enum PptxWarning {
 impl fmt::Display for PptxWarning {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
+            Self::UnsupportedTheme { part, name } => write!(f, "{part}: unsupported theme {name}"),
             Self::SlideContentNotRendered { slide_id, part } => {
                 write!(
                     f,
@@ -206,6 +218,7 @@ pub struct Presentation {
     slides: Vec<SlideRef>,
     warnings: Vec<PptxWarning>,
     contents: Vec<Slide>,
+    theme: Option<Theme>,
 }
 
 impl Presentation {
@@ -260,6 +273,7 @@ impl Presentation {
             slides,
             warnings,
             contents: vec![],
+            theme: None,
         })
     }
 
@@ -270,6 +284,8 @@ impl Presentation {
         limits: ParseLimits,
     ) -> Result<Self, PptxError> {
         let mut presentation = Self::parse(package, limits)?;
+        let main = package.inspect_pptx()?.presentation_part;
+        presentation.theme = theme_xml::load(package, &main, limits, &mut presentation.warnings)?;
         let mut images = BTreeMap::new();
         presentation
             .warnings
@@ -282,6 +298,7 @@ impl Presentation {
                 reference,
                 limits,
                 &mut presentation.warnings,
+                presentation.theme.as_ref(),
             )?;
             presentation.contents.push(content);
             for relationship in package.relationships(Some(reference.part_name()))? {
@@ -306,6 +323,11 @@ impl Presentation {
     /// Parsed content in `slides()` order; empty after metadata-only parsing.
     pub fn slide_contents(&self) -> &[Slide] {
         &self.contents
+    }
+
+    /// The presentation's explicit theme resource; metadata-only parsing stays opaque.
+    pub fn theme(&self) -> Option<&Theme> {
+        self.theme.as_ref()
     }
 
     /// Paint backgrounds first, then shapes in XML order. Metadata-only models

@@ -93,7 +93,7 @@ fn direct_family_local_defaults_styles_and_theme_font_warning() {
         theme
             .warnings()
             .iter()
-            .any(|w| w.to_string().contains("theme font inheritance unresolved"))
+            .any(|w| w.to_string().contains("theme font +mj-lt unresolved"))
     );
     assert!(
         parse(

@@ -1,6 +1,7 @@
 This document records completed milestones chronologically. Milestone 1G-B
 describes the current configured-font layout path and the final Milestone 1H
-section adds individual element transforms; earlier standard-font descriptions
+section adds individual element transforms. Milestone 1I-A below adds explicit
+theme resolution; earlier standard-font descriptions
 remain the compatibility-path history.
 
 # Milestone 0: Common DisplayList to PDF
@@ -1111,3 +1112,43 @@ quadrant-image orientation, reflected ABC text, shared borders/text and wrapped
 Unicode fit as intended. Independent Poppler extraction recovered rotated
 Résumé/日本語/ffi and the mirrored ABC labels. Poppler is a development QA tool,
 not a runtime dependency.
+
+# Milestone 1I-A: Presentation themes and generic resolution
+
+Baseline: `f392e61`. The additive semantic pipeline is:
+
+```text
+OPC officeDocument -> presentation theme relationship -> bounded DrawingML XML
+  -> owned PPTX Theme / ColorScheme / FontScheme
+  -> shared color resolver / explicit Latin theme font resolver
+  -> existing PPTX Slide / TextStyle -> generic fonts/layout -> DisplayList -> PDF
+```
+
+`o2p-ooxml` retains all relationship/path/package mechanics. `o2p-pptx` loads the
+presentation's explicit internal theme relationship through `relationships()`
+and `part()`, without ZIP inspection or conventional-path assumptions. The theme
+uses the same XML security limits and adapter as slide content. Only
+content-aware parsing loads it; metadata-only parsing/inspection stay opaque.
+The optional owned theme is exposed by the additive `Presentation::theme()` API.
+Malformed supported theme values add `PptxError::InvalidTheme`; unsupported theme
+semantics add `PptxWarning::UnsupportedTheme`. Existing APIs keep their contracts.
+
+All twelve standard color slots support sRGB or deterministic system `lastClr`.
+One adapter handles direct/scheme color selection and tint, shade, lumMod/lumOff
+for backgrounds, fills, outlines, lines and text. Unavailable paint preserves
+the prior omission/local-text-color fallback with structured warnings. Direct
+sRGB never depends on theme availability. Master color-map aliases are deferred.
+
+Major/minor Latin and available script mappings are normalized. Explicit
+`+mj-lt`/`+mn-lt` tokens become ordinary requested family names, so absent fonts
+retain generic substitution diagnostics. No PPTX token semantics enter fonts,
+layout, core or PDF. Absent run typefaces do not synthesize theme inheritance.
+The only slide/text integration changes replace the existing shared color and
+explicit typeface parsing points; drawing/layout/serialization remain intact.
+
+No dependency changes or architectural rewrite. Presentation-scoped theme
+discovery does not follow masters/layouts, select per-master themes, inherit
+placeholder properties, or interpret the style matrix. See [THEMES.md](THEMES.md)
+for supported slots/transforms, priority, errors, fallbacks, discovery limits and
+deferred semantics. Ten synthetic fixtures and parser/math/font/PDF/CLI tests
+extend completed-milestone regressions.

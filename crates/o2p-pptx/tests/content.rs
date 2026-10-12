@@ -287,11 +287,11 @@ fn unsupported_fills_color_transforms_and_inheritance_warn() {
             "alpha",
         ),
         (
-            "<a:solidFill><a:srgbClr val='123456'><a:tint val='20000'/></a:srgbClr></a:solidFill>",
-            "tint",
+            "<a:solidFill><a:srgbClr val='123456'><a:satMod val='20000'/></a:srgbClr></a:solidFill>",
+            "satMod",
         ),
         (
-            "<a:solidFill><a:sysClr val='window' lastClr='FFFFFF'/></a:solidFill>",
+            "<a:solidFill><a:sysClr val='window'/></a:solidFill>",
             "sysClr",
         ),
         ("", "inherited fill"),

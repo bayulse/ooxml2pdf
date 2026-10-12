@@ -53,8 +53,18 @@ transform rectangles; individual elements support center-based clockwise rotatio
 flips through native PDF graphics transforms. Crop/tile and effects are warned
 about and omitted. Basic text boxes support direct size, bold, italic, sRGB color, explicit breaks
 and left/center/right alignment. Unresolved text properties use documented
-fallbacks and warnings. Themes, inherited styles and other advanced features
+fallbacks and warnings. Explicit presentation-theme colors and +mj-lt/+mn-lt
+Latin font tokens resolve through the PPTX theme model. Inherited styles and other advanced features
 remain unsupported and produce structured warnings on stderr.
+
+Render the synthetic theme palette and explicit major/minor font requests:
+
+```sh
+cargo run --offline -p o2p-cli -- convert fixtures/pptx/theme-colors-and-fonts.pptx --font-dir fixtures/fonts -o target/theme-colors-and-fonts.pdf
+```
+
+See [theme semantics and fidelity](docs/THEMES.md) for supported slots,
+transforms, font aliases, fallback priority and deferred master/layout semantics.
 Missing/invalid slide sizes, malformed referenced slide XML, or slide
 relationships fail before writing output. Existing output files are overwritten
 after successful parsing/rendering; the parent directory must exist.

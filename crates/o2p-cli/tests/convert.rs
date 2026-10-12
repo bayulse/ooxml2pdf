@@ -44,6 +44,58 @@ fn convert(input: &Path, output: &Path) -> std::process::Output {
 }
 
 #[test]
+fn theme_cli_renders_palette_embedded_font_and_preserves_output_on_bad_theme() {
+    let directory = TestDirectory::new();
+    let destination = directory.0.join("theme-colors-and-fonts.pdf");
+    let run = || {
+        Command::new(env!("CARGO_BIN_EXE_o2p"))
+            .arg("convert")
+            .arg(fixture("theme-colors-and-fonts.pptx"))
+            .arg("--font-dir")
+            .arg(Path::new(env!("CARGO_MANIFEST_DIR")).join("../../fixtures/fonts"))
+            .arg("-o")
+            .arg(&destination)
+            .output()
+            .unwrap()
+    };
+    let output = run();
+    assert!(
+        output.status.success(),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let warnings = String::from_utf8_lossy(&output.stderr);
+    assert!(!warnings.contains("theme color unavailable"));
+    assert!(!warnings.contains("Substitution") && !warnings.contains("MissingFont"));
+    let bytes = fs::read(&destination).unwrap();
+    assert!(run().status.success());
+    assert_eq!(bytes, fs::read(&destination).unwrap());
+    let pdf = lopdf::Document::load_mem(&bytes).unwrap();
+    let extracted = pdf.extract_text(&[1]).unwrap();
+    assert!(
+        extracted.contains("Résumé")
+            && extracted.contains("Major Latin")
+            && extracted.contains("Minor Latin")
+    );
+    assert!(bytes.windows(10).any(|w| w == b"/FontFile2"));
+    assert!(bytes.windows(10).any(|w| w == b"/ToUnicode"));
+    let output = convert(&fixture("malformed-theme.pptx"), &destination);
+    assert!(!output.status.success());
+    assert!(String::from_utf8_lossy(&output.stderr).contains("Invalid theme"));
+    assert_eq!(bytes, fs::read(&destination).unwrap());
+    let inspection = Command::new(env!("CARGO_BIN_EXE_o2p"))
+        .arg("inspect")
+        .arg(fixture("malformed-theme.pptx"))
+        .output()
+        .unwrap();
+    assert!(inspection.status.success());
+    let missing = convert(&fixture("missing-theme.pptx"), &destination);
+    assert!(missing.status.success());
+    let warnings = String::from_utf8_lossy(&missing.stderr);
+    assert!(warnings.contains("schemeClr") && warnings.contains("+mj-lt unresolved"));
+}
+
+#[test]
 fn mixed_transforms_cli_keeps_native_images_vectors_and_searchable_rotated_text() {
     let directory = TestDirectory::new();
     let destination = directory.0.join("mixed-transforms.pdf");

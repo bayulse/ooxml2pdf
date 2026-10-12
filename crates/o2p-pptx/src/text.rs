@@ -69,7 +69,7 @@ impl Parser<'_> {
             self.element_only(list)?;
             self.other_children(list, &[]);
         }
-        // Theme/master/layout and font face inheritance are deliberately unresolved.
+        // Master/layout and implicit font inheritance remain unresolved.
         self.warn("text inheritance/font resolution: fallback is 18pt regular black sans-serif, left/top aligned with 7.2pt horizontal and 3.6pt vertical insets; direct properties override fallback".into());
         let mut paragraphs = vec![];
         for paragraph in body.children().filter(|n| n.has_tag_name((dml, "p"))) {
@@ -237,12 +237,12 @@ impl Parser<'_> {
             if family.len() > 256 || family.chars().any(char::is_control) {
                 return Err(self.invalid("invalid font family"));
             }
-            if family.starts_with('+') {
-                self.warn("theme font inheritance unresolved: using configured sans-serif".into());
-                style.family = None;
-            } else {
-                style.family = (!family.trim().is_empty()).then(|| family.to_owned());
-            }
+            let mut context = crate::theme_xml::Context {
+                part: self.reference.part_name(),
+                slide_id: Some(self.reference.id()),
+                warnings: self.warnings,
+            };
+            style.family = crate::theme_xml::font(family, self.theme, &mut context);
         }
         self.other_children(
             node,

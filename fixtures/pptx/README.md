@@ -199,3 +199,30 @@ cargo run --offline -p o2p-cli -- convert fixtures/pptx/mixed-transforms.pptx -o
 Add `--font-dir fixtures/fonts` to exercise embedded Unicode fonts and wrapping.
 Legacy font-resolution and unwrapped overflow warnings remain expected for text
 boxes. The transform fixtures contain no unsupported element transforms.
+
+## Milestone 1I-A theme fixtures
+
+Regenerate with `cargo run --offline -p o2p-pptx --example generate_fixtures`.
+These ten original minimal packages include explicit presentation theme
+relationships; all previous fixture bytes remain unchanged. The theme defines
+twelve distinct colors, major/minor O2P Test Sans and a preserved Japanese script
+mapping. Its unsupported style matrix is empty and produces a structured warning.
+
+| Fixture | Purpose |
+| --- | --- |
+| theme-accent-fill.pptx | Direct accent1 rectangle fill |
+| theme-outline.pptx | Accent2 ellipse outline and line |
+| theme-text-color.pptx | Explicit accent4 text color |
+| multiple-theme-colors.pptx | All twelve scheme slots as swatches |
+| theme-major-font.pptx | Explicit +mj-lt request |
+| theme-minor-font.pptx | Explicit +mn-lt request |
+| theme-color-transform.pptx | Ordered luminance/tint/shade transforms |
+| missing-theme.pptx | Scheme paint omitted, text color/font fallback with warnings |
+| malformed-theme.pptx | Invalid lastClr; conversion fails while inspect succeeds |
+| theme-colors-and-fonts.pptx | Theme background, full palette, themed text and line |
+
+```sh
+cargo run --offline -p o2p-cli -- convert fixtures/pptx/theme-colors-and-fonts.pptx --font-dir fixtures/fonts -o target/theme-colors-and-fonts.pdf
+```
+
+See [THEMES.md](../../docs/THEMES.md) for discovery and fidelity scope.

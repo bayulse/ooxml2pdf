@@ -92,6 +92,10 @@ pub fn fixtures() -> Vec<(&'static str, Parts)> {
 }
 
 pub const DML: &str = "http://schemas.openxmlformats.org/drawingml/2006/main";
+#[path = "themes.rs"]
+mod themes;
+#[allow(unused_imports)]
+pub use themes::*;
 pub const NONTRIVIAL_RECT: (i64, i64, i64, i64) = (1_234_567, 765_432, 3_456_789, 2_345_678);
 
 pub fn solid(color: &str) -> String {

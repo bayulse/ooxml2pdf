@@ -257,6 +257,32 @@ SmartArt, animations, DOCX/XLSX and Flutter remain deferred. See the final
 [ARCHITECTURE.md](ARCHITECTURE.md) section for the exact composition/coordinate
 contract and [FONTS.md](FONTS.md) for selection/search limits.
 
+## Milestone 1I-A — PPTX themes and generic theme resolution (complete)
+
+Baseline: `f392e61`.
+
+- Discover the presentation's theme through existing OPC relationship/part APIs.
+- Own normalized Theme/ColorScheme/FontScheme without XML implementation types.
+- Resolve all twelve standard color slots from sRGB and system lastClr values.
+- Centralize direct/scheme color resolution for backgrounds, fills, outlines,
+  lines and text, with documented fallbacks and structured warnings.
+- Apply the conservative tint/shade/lumMod/lumOff subset through shared math.
+- Capture major/minor Latin fonts and preserve available script mappings.
+- Resolve explicit +mj-lt/+mn-lt to real generic family requests; retain generic
+  font substitution, shaping, measured wrapping, embedding and Unicode mappings.
+- Add ten minimal original fixtures, parser/math/font/PDF/CLI/security tests and
+  a visible palette/font-request end-to-end example. Reuse all dependencies.
+
+```sh
+cargo run --offline -p o2p-cli -- convert fixtures/pptx/theme-colors-and-fonts.pptx --font-dir fixtures/fonts -o target/theme-colors-and-fonts.pdf
+```
+
+Master/layout/placeholder inheritance, per-master themes/theme overrides,
+color-map aliases, style matrices, grouped shapes and advanced effects remain
+deferred. This milestone resolves explicit theme references only. DOCX/XLSX,
+Flutter, charts, SmartArt and animations remain outside scope. See
+[THEMES.md](THEMES.md) for exact semantics and fidelity limits.
+
 ## Validation
 
 ```sh

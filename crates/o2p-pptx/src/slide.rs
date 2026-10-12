@@ -1,7 +1,7 @@
 //! PresentationML/DrawingML semantics, isolated from OPC and PDF rendering.
 #[path = "text.rs"]
 mod text;
-use o2p_core::{Color, ImageFormat, ImageOp, ImageResource, Point, Rect, Size, Transform};
+use o2p_core::{ImageFormat, ImageOp, ImageResource, Point, Rect, Size, Transform};
 use o2p_ooxml::{OoxmlPackage, RelationshipTarget};
 use roxmltree::Node;
 use std::{collections::BTreeMap, sync::Arc};
@@ -33,6 +33,7 @@ pub(super) fn parse(
     reference: &SlideRef,
     limits: ParseLimits,
     warnings: &mut Vec<PptxWarning>,
+    theme: Option<&crate::Theme>,
 ) -> Result<Slide, PptxError> {
     xml::with_document(bytes, reference.part_name(), limits, |document| {
         let root = document.root_element();
@@ -48,6 +49,7 @@ pub(super) fn parse(
             images,
             reference,
             warnings,
+            theme,
             pml,
             dml: if pml == PML { DML } else { STRICT_DML },
         };
@@ -123,6 +125,7 @@ struct Parser<'a> {
     images: &'a mut BTreeMap<String, Arc<ImageResource>>,
     reference: &'a SlideRef,
     warnings: &'a mut Vec<PptxWarning>,
+    theme: Option<&'a crate::Theme>,
     pml: &'a str,
     dml: &'static str,
 }
@@ -586,31 +589,13 @@ impl Parser<'_> {
                 if colors.next().is_some() {
                     return Err(self.invalid("solidFill has multiple colors"));
                 }
-                if !color.has_tag_name((self.dml, "srgbClr")) {
-                    self.unsupported(color);
-                    return Ok(None);
-                }
-                self.attributes(color, &["val"]);
-                let raw = color
-                    .attribute("val")
-                    .ok_or_else(|| self.invalid("missing sRGB val"))?;
-                if raw.len() != 6 || !raw.bytes().all(|b| b.is_ascii_hexdigit()) {
-                    return Err(self.invalid("sRGB val must be six hexadecimal digits"));
-                }
-                let number =
-                    u32::from_str_radix(raw, 16).map_err(|_| self.invalid("invalid sRGB color"))?;
-                self.element_only(color)?;
-                if color.children().any(|child| child.is_element()) {
-                    // Alpha, tint, shade and other transforms cannot be silently
-                    // treated as the base color.
-                    self.other_children(color, &[]);
-                    return Ok(None);
-                }
-                Ok(Some(Fill::Solid(Color::rgb(
-                    (number >> 16) as u8,
-                    (number >> 8) as u8,
-                    number as u8,
-                ))))
+                let mut context = crate::theme_xml::Context {
+                    part: self.reference.part_name(),
+                    slide_id: Some(self.reference.id()),
+                    warnings: self.warnings,
+                };
+                crate::theme_xml::color(color, self.dml, self.theme, &mut context)
+                    .map(|color| color.map(Fill::Solid))
             }
             _ => {
                 self.unsupported(node);
