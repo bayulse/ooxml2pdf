@@ -103,14 +103,14 @@ impl Parser<'_> {
                 }
             };
             if let Some(style) = self.single(properties, dml, "defRPr")? {
-                default = self.text_style(style, default)?;
+                default = self.text_style(style, default.clone())?;
             }
             self.other_children(properties, &[(dml, "defRPr")]);
         }
         let end_style = if let Some(end) = end {
-            self.text_style(end, default)?
+            self.text_style(end, default.clone())?
         } else {
-            default
+            default.clone()
         };
         let mut runs = vec![];
         let mut seen_run = false;
@@ -134,9 +134,9 @@ impl Parser<'_> {
                 self.attributes(child, &[]);
                 self.other_children(child, &[(dml, "rPr"), (dml, "t")]);
                 let style = if let Some(style) = self.single(child, dml, "rPr")? {
-                    self.text_style(style, default)?
+                    self.text_style(style, default.clone())?
                 } else {
-                    default
+                    default.clone()
                 };
                 let text = self
                     .single(child, dml, "t")?
@@ -170,9 +170,9 @@ impl Parser<'_> {
                 self.attributes(child, &[]);
                 self.other_children(child, &[(dml, "rPr")]);
                 let style = if let Some(style) = self.single(child, dml, "rPr")? {
-                    self.text_style(style, default)?
+                    self.text_style(style, default.clone())?
                 } else {
-                    default
+                    default.clone()
                 };
                 runs.push(TextRun {
                     text: "\n".into(),
@@ -226,9 +226,26 @@ impl Parser<'_> {
                 self.warn("unresolved text color: using paragraph/default fallback color".into());
             }
         }
+        if let Some(latin) = self.single(node, dml, "latin")? {
+            self.attributes(latin, &["typeface"]);
+            self.leaf(latin)?;
+            let family = latin
+                .attribute("typeface")
+                .ok_or_else(|| self.invalid("latin missing typeface"))?;
+            if family.len() > 256 || family.chars().any(char::is_control) {
+                return Err(self.invalid("invalid font family"));
+            }
+            if family.starts_with('+') {
+                self.warn("theme font inheritance unresolved: using configured sans-serif".into());
+                style.family = None;
+            } else {
+                style.family = (!family.trim().is_empty()).then(|| family.to_owned());
+            }
+        }
         self.other_children(
             node,
             &[
+                (dml, "latin"),
                 (dml, "solidFill"),
                 (dml, "noFill"),
                 (dml, "gradFill"),

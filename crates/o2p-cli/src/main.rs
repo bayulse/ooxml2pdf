@@ -2,12 +2,18 @@ use std::{env, ffi::OsString, fs, path::PathBuf, process::ExitCode};
 
 use o2p_core::{Color, DisplayList, DrawOp, Font, LineOp, Page, Point, Rect, RectOp, Size, TextOp};
 
-const USAGE: &str = "Usage: o2p demo <output.pdf>\n       o2p inspect <file.pptx>\n       o2p convert <input.pptx> -o <output.pdf>\n       o2p --help\n\nPPTX conversion supports solid backgrounds, rectangles, ellipses, straight lines embedded PNG/JPEG pictures and basic text; empty slides produce blank pages.";
+const USAGE: &str = "Usage: o2p demo <output.pdf>\n       o2p inspect <file.pptx>\n       o2p convert <input.pptx> -o <output.pdf> [--font <file>] [--font-dir <directory>] [--fallback-family <family>]\n       o2p --help\n\nPPTX conversion supports solid backgrounds, rectangles, ellipses, straight lines embedded PNG/JPEG pictures and basic text; empty slides produce blank pages.";
 
 enum Command {
     Demo(PathBuf),
     Inspect(PathBuf),
-    Convert { input: PathBuf, output: PathBuf },
+    Convert {
+        input: PathBuf,
+        output: PathBuf,
+        fonts: Vec<PathBuf>,
+        font_dirs: Vec<PathBuf>,
+        fallback_families: Vec<String>,
+    },
     Help,
 }
 
@@ -15,17 +21,33 @@ fn parse_args(args: impl IntoIterator<Item = OsString>) -> Result<Command, &'sta
     let mut args = args.into_iter();
     let first = args.next();
     if first.as_deref() == Some(std::ffi::OsStr::new("convert")) {
-        return match (args.next(), args.next(), args.next(), args.next()) {
-            (Some(input), Some(flag), Some(output), None)
-                if !input.is_empty() && flag == "-o" && !output.is_empty() =>
-            {
-                Ok(Command::Convert {
-                    input: input.into(),
-                    output: output.into(),
-                })
+        let input = args.next().filter(|p| !p.is_empty()).ok_or(USAGE)?;
+        let mut output = None;
+        let mut fonts = Vec::new();
+        let mut font_dirs = Vec::new();
+        let mut fallback_families = Vec::new();
+        while let Some(flag) = args.next() {
+            let value = args.next().filter(|p| !p.is_empty()).ok_or(USAGE)?;
+            match flag.to_str() {
+                Some("-o") if output.is_none() => output = Some(PathBuf::from(value)),
+                Some("--font") => fonts.push(PathBuf::from(value)),
+                Some("--font-dir") => font_dirs.push(PathBuf::from(value)),
+                Some("--fallback-family") => {
+                    fallback_families.push(value.into_string().map_err(|_| USAGE)?)
+                }
+                _ => return Err(USAGE),
             }
-            _ => Err(USAGE),
-        };
+        }
+        if !fallback_families.is_empty() && fonts.is_empty() && font_dirs.is_empty() {
+            return Err(USAGE);
+        }
+        return Ok(Command::Convert {
+            input: input.into(),
+            output: output.ok_or(USAGE)?,
+            fonts,
+            font_dirs,
+            fallback_families,
+        });
     }
     match (first, args.next(), args.next()) {
         (Some(command), None, None) if command == "--help" || command == "-h" => Ok(Command::Help),
@@ -92,7 +114,13 @@ fn main() -> ExitCode {
     };
     match command {
         Command::Help => println!("{USAGE}"),
-        Command::Convert { input, output } => {
+        Command::Convert {
+            input,
+            output,
+            fonts,
+            font_dirs,
+            fallback_families,
+        } => {
             let presentation =
                 match o2p_ooxml::OoxmlPackage::open(&input, o2p_ooxml::SecurityLimits::default()) {
                     Ok(package) => o2p_pptx::Presentation::parse_with_content(
@@ -108,7 +136,44 @@ fn main() -> ExitCode {
                     return ExitCode::FAILURE;
                 }
             };
-            let report = match o2p_pdf::render_with_report(&presentation.to_display_list()) {
+            let mut font_warnings = Vec::new();
+            let display = if fonts.is_empty() && font_dirs.is_empty() {
+                presentation.to_display_list()
+            } else {
+                let configured = (|| {
+                    let mut book = o2p_fonts::FontBook::new();
+                    for path in fonts {
+                        book.register_file(path)?;
+                    }
+                    for path in font_dirs {
+                        book.register_directory(path)?;
+                    }
+                    let families = if fallback_families.is_empty() {
+                        let mut names = Vec::new();
+                        for font in book.fonts() {
+                            if !names.contains(&font.metadata().family) {
+                                names.push(font.metadata().family.clone());
+                            }
+                        }
+                        names
+                    } else {
+                        fallback_families
+                    };
+                    book.set_fallback_families(families);
+                    presentation.to_display_list_with_fonts(&book)
+                })();
+                match configured {
+                    Ok(layout) => {
+                        font_warnings = layout.warnings;
+                        layout.display_list
+                    }
+                    Err(error) => {
+                        eprintln!("Font layout failed: {error}");
+                        return ExitCode::FAILURE;
+                    }
+                }
+            };
+            let report = match o2p_pdf::render_with_report(&display) {
                 Ok(report) => report,
                 Err(error) => {
                     eprintln!("PDF rendering failed: {error}");
@@ -118,6 +183,9 @@ fn main() -> ExitCode {
             if let Err(error) = fs::write(&output, &report.bytes) {
                 eprintln!("Cannot write {}: {error}", output.display());
                 return ExitCode::FAILURE;
+            }
+            for warning in &font_warnings {
+                eprintln!("Warning: {warning}");
             }
             for warning in &report.warnings {
                 eprintln!("Warning: {warning}");
@@ -198,7 +266,7 @@ mod tests {
         let output = OsString::from_vec(b"output-\xfe.pdf".to_vec());
         assert!(
             matches!(parse_args(["convert".into(), input.clone(), "-o".into(), output.clone()]),
-            Ok(Command::Convert { input: parsed_input, output: parsed_output })
+            Ok(Command::Convert { input: parsed_input, output: parsed_output, .. })
             if parsed_input.as_os_str() == input && parsed_output.as_os_str() == output)
         );
     }

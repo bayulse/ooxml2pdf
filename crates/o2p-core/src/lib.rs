@@ -4,7 +4,9 @@
 //! x increasing rightward and y increasing downward. Operations paint in order.
 //! This crate performs no layout, font discovery, shaping, or file I/O.
 
+mod glyph;
 mod text;
+pub use glyph::{FontResource, Glyph, GlyphRun, GlyphTextOp, ShapedText};
 
 /// A position in points. Negative coordinates are allowed.
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -146,6 +148,7 @@ pub struct ImageOp {
 /// An explicit drawing command. No Office or PDF semantics appear here.
 #[derive(Debug, Clone, PartialEq)]
 pub enum DrawOp {
+    GlyphText(GlyphTextOp),
     Image(ImageOp),
     Text(TextOp),
     Rect(RectOp),

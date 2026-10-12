@@ -171,6 +171,36 @@ bullets/numbering, spacing/kerning controls, superscripts/underline/strikes, com
 effects, groups, charts and SmartArt remain deferred. DOCX, XLSX and Flutter remain
 outside the implemented scope. See ARCHITECTURE.md for precise contracts.
 
+## Milestone 1G-A — Generic fonts, Unicode shaping, and embedding (complete)
+
+- Add `o2p-fonts` with explicit byte/file/directory registration, generic requests,
+  family/style matching, configured aliases/fallbacks, glyph availability and
+  structured substitution/missing-font/missing-glyph diagnostics.
+- Adapt maintained HarfRust plus ttf-parser privately; segment Unicode scripts,
+  bidi directions and graphemes without desktop system-font discovery.
+- Preserve direct PPTX latin typefaces in the normalized model; keep theme,
+  master/layout and east-Asian/complex-script typeface selection unsupported.
+- Add generic owned shaped glyph/source/font resources to dependency-free core;
+  measure the existing unwrapped layout with shaped advances.
+- Embed complete static TrueType programs using Type0/CIDFontType2, explicit
+  CIDToGIDMap, UTF-16BE ToUnicode and logical-source ActualText. Keep actual PDF
+  text and legacy TextOp behavior. Font subsetting remains deferred.
+- Bound font/shaping/PDF mapping workloads; reject unsupported font technologies
+  and restricted embedding rights with owned errors.
+- Add small licensed test fonts, 日本語 and other Unicode fixtures, independent
+  extraction tests and all existing Latin/shape/image/text paint-order regressions.
+- Add optional CLI `--font`, `--font-dir` and `--fallback-family` configuration;
+  no implicit bundled fonts or platform defaults.
+
+```sh
+cargo run -p o2p-cli -- convert fixtures/pptx/unicode-fonts.pptx -o target/unicode-fonts.pdf --font-dir fixtures/fonts --fallback-family "O2P Test Sans" --fallback-family "O2P Test Japanese" --fallback-family "O2P Test Arabic"
+```
+
+See [FONTS.md](FONTS.md) for exact contracts, licenses and reader-dependent RTL
+extraction limits. Full PowerPoint typography, inherited/theme/OOXML embedded
+fonts, wrapping/reflow/autofit, bullets, vertical/rotated text, cross-style bidi,
+subsetting, variable/color/CFF fonts and mobile integration remain later work.
+
 ## Validation
 
 ```sh

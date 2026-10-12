@@ -29,7 +29,7 @@ The command lists slide and media part names and counts. The package library
 validates metadata, relationships, safe paths, ZIP integrity and configurable
 resource limits; external relationships are preserved and never fetched.
 
-The workspace contains `o2p-core` (dependency-free drawing model), `o2p-pdf`
+The workspace contains `o2p-core` (dependency-free drawing model), `o2p-fonts` (explicit font registration and Unicode shaping), `o2p-pdf`
 (PDF bytes), `o2p-ooxml` (OOXML / OPC packages), `o2p-pptx` (presentation metadata
 and normalized slide content), and `o2p-cli` (`o2p` executable).
 Processing is pure Rust and needs
@@ -95,3 +95,21 @@ cargo test --workspace
 
 See [the architecture decisions](docs/ARCHITECTURE.md) and
 [the product specification](docs/PRODUCT_SPEC.md).
+
+
+Milestone 1G-A adds configured font resolution, Unicode shaping and embedded
+TrueType PDF text. Supply fonts explicitly; no system discovery or default font
+bundle is required. The existing no-font-configuration path is preserved.
+
+```sh
+cargo run -p o2p-cli -- convert fixtures/pptx/unicode-text.pptx -o target/unicode.pdf --font-dir fixtures/fonts --fallback-family "O2P Test Sans" --fallback-family "O2P Test Japanese"
+```
+
+This renders **Résumé** and **日本語** as searchable/selectable embedded PDF text.
+The fixture fonts are small, licensed test assets with limited coverage; use your
+own redistribution/embedding-permitted static TrueType fonts for production.
+`--font <path>` can repeat; consumers can register `Arc<[u8]>` data through the
+library API. Fallback substitutions and missing glyphs are reported. CFF, color,
+bitmap, variable fonts and collections are rejected explicitly. See
+[font ownership, shaping and fidelity](docs/FONTS.md) and
+[test font licensing](fixtures/fonts/README.md).

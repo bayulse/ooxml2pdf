@@ -10,6 +10,7 @@ name = "o2p"
 path = "src/main.rs"
 
 [dependencies]
+o2p-fonts.workspace = true
 o2p-core.workspace = true
 o2p-pdf.workspace = true
 o2p-ooxml.workspace = true

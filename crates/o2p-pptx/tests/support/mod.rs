@@ -526,3 +526,20 @@ pub fn text_fixtures() -> Vec<(&'static str, Parts)> {
         ("overlapping-text-shape.pptx", content_deck("", &overlap)),
     ]
 }
+
+pub fn font_fixtures() -> Vec<(&'static str, Parts)> {
+    let paragraphs = "<a:p><a:r><a:rPr sz='2400'><a:latin typeface='O2P Test Sans'/></a:rPr><a:t>ASCII Résumé ffi ạ́ Привет Ελληνικά</a:t></a:r></a:p><a:p><a:r><a:rPr sz='2400'><a:latin typeface='O2P Test Sans'/></a:rPr><a:t>日本語</a:t></a:r></a:p><a:p><a:r><a:rPr sz='2400'><a:latin typeface='O2P Test Arabic'/></a:rPr><a:t>مرحبا</a:t></a:r></a:p>";
+    vec![(
+        "unicode-fonts.pptx",
+        content_deck(
+            "",
+            &text_shape(
+                2,
+                (914400, 914400, 8229600, 3657600),
+                paragraphs,
+                "<a:noFill/>",
+                "<a:ln><a:noFill/></a:ln>",
+            ),
+        ),
+    )]
+}

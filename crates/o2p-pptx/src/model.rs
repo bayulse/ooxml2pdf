@@ -59,6 +59,21 @@ impl Slide {
     }
 
     pub(crate) fn to_page(&self, size: Size) -> Page {
+        match self.to_page_with_text(size, |text| {
+            Ok::<_, std::convert::Infallible>(
+                text.layout().0.into_iter().map(DrawOp::Text).collect(),
+            )
+        }) {
+            Ok(page) => page,
+            Err(never) => match never {},
+        }
+    }
+
+    pub(crate) fn to_page_with_text<E>(
+        &self,
+        size: Size,
+        mut layout: impl FnMut(&TextBox) -> Result<Vec<DrawOp>, E>,
+    ) -> Result<Page, E> {
         let mut ops = vec![];
         if let Some(Fill::Solid(color)) = self.background {
             ops.push(DrawOp::Rect(RectOp {
@@ -72,7 +87,7 @@ impl Slide {
         for shape in &self.shapes {
             let (rect, fill, stroke) = match shape {
                 Shape::TextBox(text) => {
-                    ops.extend(text.layout().0.into_iter().map(DrawOp::Text));
+                    ops.extend(layout(text)?);
                     continue;
                 }
                 Shape::Image(image) => {
@@ -126,13 +141,16 @@ impl Slide {
                 }));
             }
         }
-        Page { size, ops }
+        Ok(Page { size, ops })
     }
 }
 
 /// Resolved basic run properties; all sizes use points.
-#[derive(Debug, Clone, Copy, PartialEq)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct TextStyle {
+    /// Direct DrawingML latin typeface; absent means configured sans-serif.
+    /// Theme/master/layout font inheritance is not resolved.
+    pub family: Option<String>,
     pub font_size: f32,
     pub bold: bool,
     pub italic: bool,
@@ -141,6 +159,7 @@ pub struct TextStyle {
 impl Default for TextStyle {
     fn default() -> Self {
         Self {
+            family: None,
             font_size: 18.0,
             bold: false,
             italic: false,
@@ -149,7 +168,7 @@ impl Default for TextStyle {
     }
 }
 impl TextStyle {
-    fn font(self) -> o2p_core::Font {
+    fn font(&self) -> o2p_core::Font {
         o2p_core::Font::sans_serif(self.bold, self.italic)
     }
 }
@@ -217,7 +236,7 @@ impl TextBox {
             - f64::from(self.insets.bottom);
         let mut overflow = false;
         for paragraph in &self.paragraphs {
-            let mut lines: Vec<Vec<(&str, TextStyle)>> = vec![vec![]];
+            let mut lines: Vec<Vec<(&str, &TextStyle)>> = vec![vec![]];
             for run in &paragraph.runs {
                 for (index, segment) in run.text.split('\n').enumerate() {
                     if index != 0 {
@@ -227,7 +246,7 @@ impl TextBox {
                     lines
                         .last_mut()
                         .expect("a line always exists")
-                        .push((segment, run.style));
+                        .push((segment, &run.style));
                 }
             }
             let last_line = lines.len() - 1;

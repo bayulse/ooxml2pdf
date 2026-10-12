@@ -1,9 +1,11 @@
 //! Deterministic PDF rendering of a format-independent display list.
 //!
 //! The public API contains only standard-library and `o2p-core` types.
-//! Fixed standard Helvetica faces support WinAnsi Unicode. The reporting API
-//! substitutes missing glyphs explicitly. No system fonts or processes are used.
+//! Legacy text uses standard Helvetica/WinAnsi; shaped text embeds configured
+//! TrueType fonts with Unicode mappings. Missing glyphs are reported explicitly.
+//! No system fonts, shaping, or processes are used by this serialization crate.
 
+mod embedded;
 mod raster;
 mod text;
 
@@ -15,6 +17,11 @@ use pdf_writer::{Content, Finish, Name, Pdf, Ref, Str};
 /// A rendering failure. Page and operation indices are zero-based.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum PdfError {
+    InvalidFont {
+        page: usize,
+        op: usize,
+        message: String,
+    },
     InvalidImage {
         page: usize,
         op: usize,
@@ -37,6 +44,10 @@ pub enum PdfError {
 impl fmt::Display for PdfError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
+            Self::InvalidFont { page, op, message } => write!(
+                f,
+                "invalid font/text on page {page}, operation {op}: {message}"
+            ),
             Self::InvalidImage { page, op, message } => {
                 write!(f, "invalid image on page {page}, operation {op}: {message}")
             }
@@ -87,17 +98,31 @@ pub fn render(display_list: &DisplayList) -> Result<Vec<u8>, PdfError> {
     Ok(render_internal(display_list, false)?.bytes)
 }
 
-/// A deterministic compatibility warning from the fixed font adapter.
+/// A deterministic missing-glyph warning from the selected text adapter.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct PdfWarning {
     pub page: usize,
     pub op: usize,
-    /// Distinct unsupported characters in first occurrence order; rendered as `?`.
+    /// Distinct missing characters in first occurrence order; see `kind`.
     pub missing_glyphs: Vec<char>,
+    pub kind: PdfWarningKind,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum PdfWarningKind {
+    LegacyMissingGlyph,
+    EmbeddedMissingGlyph,
 }
 
 impl fmt::Display for PdfWarning {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        if self.kind == PdfWarningKind::EmbeddedMissingGlyph {
+            return write!(
+                f,
+                "page {}, operation {}: embedded font has no glyphs {:?}; rendered as .notdef, Unicode source preserved",
+                self.page, self.op, self.missing_glyphs
+            );
+        }
         write!(
             f,
             "page {}, operation {}: fixed sans-serif fallback has no glyphs for {:?}; rendered as '?'",
@@ -112,7 +137,7 @@ pub struct PdfReport {
     pub warnings: Vec<PdfWarning>,
 }
 
-/// Render Unicode safely using WinAnsi and `?` for missing glyphs, with warnings.
+/// Render with warnings: legacy text uses `?`, embedded text uses `.notdef`.
 /// Control characters remain errors; callers must lay out line breaks separately.
 pub fn render_with_report(display_list: &DisplayList) -> Result<PdfReport, PdfError> {
     render_internal(display_list, true)
@@ -156,6 +181,8 @@ fn render_internal(display_list: &DisplayList, fallback: bool) -> Result<PdfRepo
     // Each decoder's pixel buffers are released immediately after its XObject is written.
     let mut images = BTreeMap::new();
     let mut next_object = extra_start + 3;
+    let embedded_fonts = embedded::prepare(display_list, &mut next_object)?;
+    embedded::write(&mut pdf, &embedded_fonts);
     for (page_index, page) in display_list.pages.iter().enumerate() {
         for (op_index, op) in page.ops.iter().enumerate() {
             if let DrawOp::Image(image) = op {
@@ -192,6 +219,9 @@ fn render_internal(display_list: &DisplayList, fallback: bool) -> Result<PdfRepo
             let mut resources = pdf_page.resources();
             {
                 let mut resource_fonts = resources.fonts();
+                for font in embedded::ordered(&embedded_fonts) {
+                    resource_fonts.pair(Name(font.name.as_bytes()), font.reference);
+                }
                 for face in [
                     Font::SansSerif,
                     Font::SansSerifBold,
@@ -222,6 +252,9 @@ fn render_internal(display_list: &DisplayList, fallback: bool) -> Result<PdfRepo
             // Every operation is isolated from the previous graphics state.
             content.save_state();
             match op {
+                DrawOp::GlyphText(text) => {
+                    embedded::draw(&mut content, &embedded_fonts, text, page.size.height)
+                }
                 DrawOp::Image(image) => {
                     let (name, _) = &images[&(Arc::as_ptr(&image.image) as usize)];
                     content.transform([
@@ -402,6 +435,87 @@ fn validate(display_list: &DisplayList, fallback: bool) -> Result<Vec<PdfWarning
                         }
                     })?;
                 }
+                DrawOp::GlyphText(text) => {
+                    if text.text.source.len() > o2p_fonts::MAX_TEXT_BYTES
+                        || text
+                            .text
+                            .runs
+                            .iter()
+                            .map(|r| r.glyphs.len())
+                            .fold(0usize, usize::saturating_add)
+                            > o2p_fonts::MAX_GLYPHS
+                    {
+                        return Err(PdfError::InvalidFont {
+                            page: page_index,
+                            op: op_index,
+                            message: "shaped text limit exceeded".into(),
+                        });
+                    }
+                    check(finite_point(text.origin), index, "text origin")?;
+                    check(positive(text.text.font_size), index, "font size")?;
+                    check(finite_point(text.text.advance), index, "text advance")?;
+                    if let Some(character) = text.text.source.chars().find(|c| c.is_control()) {
+                        return Err(PdfError::UnsupportedText {
+                            page: page_index,
+                            op: op_index,
+                            character,
+                        });
+                    }
+                    let mut missing_glyphs = Vec::new();
+                    for run in &text.text.runs {
+                        check(finite_point(run.origin), index, "glyph run origin")?;
+                        let mut x = f64::from(text.origin.x) + f64::from(run.origin.x);
+                        let mut y = f64::from(text.origin.y) + f64::from(run.origin.y);
+                        for glyph in &run.glyphs {
+                            check(
+                                finite_point(glyph.offset) && finite_point(glyph.advance),
+                                index,
+                                "glyph position",
+                            )?;
+                            check(
+                                ((x + f64::from(glyph.offset.x)) as f32).is_finite()
+                                    && ((f64::from(page.size.height)
+                                        - y
+                                        - f64::from(glyph.offset.y))
+                                        as f32)
+                                        .is_finite(),
+                                index,
+                                "glyph position",
+                            )?;
+                            x += f64::from(glyph.advance.x);
+                            y += f64::from(glyph.advance.y);
+                            check(
+                                (x as f32).is_finite() && (y as f32).is_finite(),
+                                index,
+                                "glyph advance",
+                            )?;
+                            if glyph.id == 0 {
+                                if let Some(source) = text.text.source.get(glyph.source.clone()) {
+                                    for character in source.chars() {
+                                        if !fallback {
+                                            return Err(PdfError::UnsupportedText {
+                                                page: page_index,
+                                                op: op_index,
+                                                character,
+                                            });
+                                        }
+                                        if !missing_glyphs.contains(&character) {
+                                            missing_glyphs.push(character);
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    if !missing_glyphs.is_empty() {
+                        warnings.push(PdfWarning {
+                            page: page_index,
+                            op: op_index,
+                            missing_glyphs,
+                            kind: PdfWarningKind::EmbeddedMissingGlyph,
+                        });
+                    }
+                }
                 DrawOp::Text(text) => {
                     check(finite_point(text.origin), index, "text origin")?;
                     check(
@@ -428,6 +542,7 @@ fn validate(display_list: &DisplayList, fallback: bool) -> Result<Vec<PdfWarning
                     }
                     if !missing_glyphs.is_empty() {
                         warnings.push(PdfWarning {
+                            kind: PdfWarningKind::LegacyMissingGlyph,
                             page: page_index,
                             op: op_index,
                             missing_glyphs,

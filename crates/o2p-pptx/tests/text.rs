@@ -101,7 +101,7 @@ fn direct_size_boolean_style_and_srgb_color_reach_core_and_pdf() {
     let model = model(
         "<a:p><a:r><a:rPr sz='2450' b='true' i='1'><a:solidFill><a:srgbClr val='12AbCD'/></a:solidFill></a:rPr><a:t>Styled</a:t></a:r></a:p>",
     );
-    let style = text_box(&model).paragraphs[0].runs[0].style;
+    let style = &text_box(&model).paragraphs[0].runs[0].style;
     assert_eq!(style.font_size, 24.5);
     assert!(style.bold && style.italic);
     assert_eq!(style.color, Color::rgb(18, 171, 205));
@@ -352,7 +352,7 @@ fn unsupported_recognized_styles_emit_structured_warnings() {
         ("<a:rPr strike='sngStrike'/>", "@strike"),
         ("<a:rPr spc='100'/>", "@spc"),
         ("<a:rPr baseline='30000'/>", "@baseline"),
-        ("<a:rPr><a:latin typeface='Calibri'/></a:rPr>", "latin"),
+        ("<a:rPr><a:ea typeface='Calibri'/></a:rPr>", "ea"),
         (
             "<a:rPr><a:solidFill><a:schemeClr val='tx1'/></a:solidFill></a:rPr>",
             "schemeClr",

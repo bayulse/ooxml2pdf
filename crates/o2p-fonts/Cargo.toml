@@ -1,0 +1,17 @@
+[package]
+name = "o2p-fonts"
+description = "Explicit offline font resolution and Unicode shaping"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+o2p-core.workspace = true
+ttf-parser.workspace = true
+harfrust.workspace = true
+unicode-segmentation.workspace = true
+unicode-script.workspace = true
+unicode-bidi.workspace = true
+
+[lints]
+workspace = true

@@ -44,6 +44,95 @@ fn convert(input: &Path, output: &Path) -> std::process::Output {
 }
 
 #[test]
+fn configured_fonts_embed_unicode_without_missing_japanese_and_preserve_cli_output_on_error() {
+    let directory = TestDirectory::new();
+    let output = directory.0.join("embedded.pdf");
+    let font_directory = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../fixtures/fonts");
+    let result = Command::new(env!("CARGO_BIN_EXE_o2p"))
+        .arg("convert")
+        .arg(fixture("unicode-text.pptx"))
+        .arg("-o")
+        .arg(&output)
+        .arg("--font-dir")
+        .arg(&font_directory)
+        .output()
+        .unwrap();
+    assert!(
+        result.status.success(),
+        "{}",
+        String::from_utf8_lossy(&result.stderr)
+    );
+    let warnings = String::from_utf8(result.stderr).unwrap();
+    assert!(warnings.contains("Substitution"));
+    assert!(!warnings.contains("MissingGlyph") && !warnings.contains("rendered as '?'"));
+    let first = fs::read(&output).unwrap();
+    let pdf = lopdf::Document::load_mem(&first).unwrap();
+    let text = pdf.extract_text(&[1]).unwrap();
+    assert!(text.contains("Résumé") && text.contains("日本語"));
+    let result = Command::new(env!("CARGO_BIN_EXE_o2p"))
+        .arg("convert")
+        .arg(fixture("unicode-text.pptx"))
+        .arg("-o")
+        .arg(&output)
+        .arg("--font-dir")
+        .arg(&font_directory)
+        .output()
+        .unwrap();
+    assert!(result.status.success());
+    assert_eq!(first, fs::read(&output).unwrap());
+    let broken = directory.0.join("bad.ttf");
+    fs::write(&broken, b"invalid font").unwrap();
+    let result = Command::new(env!("CARGO_BIN_EXE_o2p"))
+        .arg("convert")
+        .arg(fixture("unicode-text.pptx"))
+        .arg("-o")
+        .arg(&output)
+        .arg("--font")
+        .arg(&broken)
+        .output()
+        .unwrap();
+    assert!(!result.status.success());
+    assert_eq!(first, fs::read(&output).unwrap());
+    assert!(String::from_utf8_lossy(&result.stderr).contains("InvalidFont"));
+}
+
+#[test]
+fn individual_font_paths_and_configured_fallback_families_are_accepted() {
+    let directory = TestDirectory::new();
+    let output = directory.0.join("explicit.pdf");
+    let fonts = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../fixtures/fonts");
+    let result = Command::new(env!("CARGO_BIN_EXE_o2p"))
+        .arg("convert")
+        .arg(fixture("unicode-text.pptx"))
+        .arg("-o")
+        .arg(&output)
+        .arg("--font")
+        .arg(fonts.join("O2PTestSans-Regular.ttf"))
+        .arg("--font")
+        .arg(fonts.join("O2PTestJapanese-Regular.ttf"))
+        .args([
+            "--fallback-family",
+            "O2P Test Sans",
+            "--fallback-family",
+            "O2P Test Japanese",
+        ])
+        .output()
+        .unwrap();
+    assert!(
+        result.status.success(),
+        "{}",
+        String::from_utf8_lossy(&result.stderr)
+    );
+    assert!(
+        lopdf::Document::load_mem(&fs::read(output).unwrap())
+            .unwrap()
+            .extract_text(&[1])
+            .unwrap()
+            .contains("日本語")
+    );
+}
+
+#[test]
 fn conversion_preserves_deterministic_blank_pages_with_correct_dimensions() {
     let directory = TestDirectory::new();
     for (name, count, width) in [

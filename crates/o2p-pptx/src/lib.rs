@@ -4,7 +4,9 @@
 //! backgrounds, rectangles, ellipses, straight lines, embedded raster pictures and basic text.
 //! No PDF commands or external loading occur.
 
+mod font_layout;
 mod model;
+pub use font_layout::{FontDisplayReport, TextLayoutWarning, TextLayoutWarningKind};
 mod slide;
 mod xml;
 

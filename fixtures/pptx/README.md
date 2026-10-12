@@ -137,3 +137,10 @@ Japanese glyphs are deliberately rendered as `???` by the CLI with structured
 warnings. Literal Unicode remains in the normalized model; strict PDF `render`
 returns UnsupportedText for glyphs outside WinAnsi. Neither rendering path uses
 system fonts, theme/master/layout resolution, wrapping, autofit or shaping.
+
+
+`unicode-fonts.pptx` is a deterministic Milestone 1G-A regression fixture with
+explicit `O2P Test Sans` / `O2P Test Arabic` typefaces: ASCII, Résumé, ffi,
+combining marks, Greek/Cyrillic, 日本語 and Arabic. It contains no embedded fonts;
+register the licensed [font fixtures](../fonts/README.md) for Unicode rendering.
+The existing generator reproduces it alongside all earlier fixtures.

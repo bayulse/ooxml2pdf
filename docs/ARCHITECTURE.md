@@ -1,3 +1,7 @@
+This document records completed milestones chronologically. The final Milestone
+1G-A section describes the current configured-font path; earlier standard-font
+descriptions remain the compatibility-path history.
+
 # Milestone 0: Common DisplayList to PDF
 
 Milestone 0 proves the last stage of the intended pipeline:
@@ -855,3 +859,68 @@ The test output is also rasterized with Poppler for visual QA during development
 Poppler is never a rendering dependency or a runtime engine subprocess. The
 visible result contains a filled/outlined rectangle, the original quadrant image,
 and readable “Hello Indonesia — Résumé” plus “Text and image”.
+
+
+# Milestone 1G-A: Generic fonts, Unicode shaping, and embedding
+
+Baseline: tagged `v0.1.0-alpha.1` (`7fc634d`). Completed package, vector, image,
+inspection, and basic text paths remain intact. New configured pipeline:
+
+```text
+PPTX XML -> normalized PPTX text (including direct latin typeface)
+         -> o2p-fonts request / configured resolver / Unicode shaping
+         -> basic PPTX layout measured using shaped advances
+         -> o2p-core GlyphTextOp / ShapedText / GlyphRun
+         -> o2p-pdf embedded Type0 / CIDFontType2 -> PDF
+```
+
+`o2p-fonts` depends on core and privately adapts font/shaping dependencies. Core
+remains dependency-free. PPTX passes generic family/weight/style requests and
+positions shaped output; PDF validates and serializes it. No PPTX code emits PDF
+commands, and PDF does not resolve fonts or shape text. No global platform font
+registry is required. File, byte-buffer, and configured-directory registration
+serve desktop, bundled mobile, and future platform-provider consumers alike.
+
+Core owns shared full font bytes with `Arc<FontResource>` and UTF-8 source ranges
+for positioned glyphs. Registry models and DisplayLists share bytes and have no
+package/parser lifetime dependency. Resolution chooses requested faces, explicit
+compatible aliases, then configured fallback families, with stable style and
+registration-order ties. Substitution and missing-font/glyph warnings are owned,
+structured results. Grapheme boundaries prevent splitting combining sequences.
+
+The shaping boundary is deliberately before DisplayList construction, so layout
+and PDF cannot disagree about selected-font advances. `GlyphTextOp` retains
+logical Unicode independently of visual glyph order. Advances/offsets, segment
+baselines and font sizes use points; geometry/paint order remain unchanged.
+Existing `TextOp` and no-configuration CLI calls retain the Helvetica/WinAnsi
+behavior, including strict errors and reporting replacement. Adding owned family
+information makes PPTX `TextStyle` Clone rather than Copy.
+
+PDF embeds each font resource once, in full, without subsetting. Type0/Identity-H
+fonts reference CIDFontType2 descendants, descriptors, widths, explicit
+CIDToGIDMap and UTF-16BE ToUnicode mappings. CIDs distinguish glyph/source pairs.
+ActualText preserves the semantic run for combining clusters and logical bidi
+text; glyphs remain selectable PDF text. Reader-dependent RTL extraction and
+lopdf's lack of ActualText support are documented, not hidden.
+
+HarfRust 0.14.0 (MIT) is the focused maintained pure-Rust shaper; ttf-parser 0.25.1
+(MIT OR Apache-2.0) supplies bounded parsing/metrics/rights checks. Unicode bidi,
+script and grapheme helpers support deterministic segmentation. All versions
+fit Rust 1.85. No system discovery, fontconfig, rasterizer, native service, cloud
+or process dependency is introduced. Static standalone TrueType/glyf is the
+supported embedding path; CFF/CFF2, variable, color, bitmap and collection fonts
+return structured errors. Font and text workloads have explicit ceilings.
+
+See [FONTS.md](FONTS.md) for ownership, matching policy, dependency/license
+comparison, security limits, Unicode/extraction strategy and precise limitations.
+See [fixture licenses](../fixtures/fonts/README.md) for the small OFL test fonts,
+including a 3 KiB Japanese case. Test-asset preparation is independent of runtime
+font subsetting (still deferred). Unicode fixtures include ASCII, Résumé,
+Greek/Cyrillic, ligatures/combining marks, Arabic and 日本語. Tests retain all prior
+regressions and verify metadata, fallback/styles/warnings, glyph order, object
+embedding, source mapping, independent extraction and mixed paint order.
+
+Themes, master/layout font inheritance, wrapping/reflow/autofit, character
+spacing, bullets/numbering, rotation/vertical text, paragraph-wide cross-style
+bidi, font subsetting and unsupported font technologies remain deferred. DOCX,
+XLSX, Flutter, charts and SmartArt are unchanged and unimplemented.
