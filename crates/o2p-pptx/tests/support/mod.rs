@@ -543,3 +543,90 @@ pub fn font_fixtures() -> Vec<(&'static str, Parts)> {
         ),
     )]
 }
+
+/// Original wrapping fixtures: direct fonts, outlined inset boxes, no autofit.
+pub fn wrapping_fixtures() -> Vec<(&'static str, Parts)> {
+    let run = |text: &str| {
+        format!(
+            "<a:r><a:rPr sz='2000'><a:latin typeface='O2P Test Sans'/></a:rPr><a:t>{text}</a:t></a:r>"
+        )
+    };
+    let paragraph = |text: &str, alignment: &str| {
+        format!("<a:p><a:pPr algn='{alignment}'/>{}</a:p>", run(text))
+    };
+    let deck = |text: &str, height: i64| {
+        content_deck(
+            "",
+            &text_shape(
+                2,
+                (914_400, 914_400, 2_794_000, height),
+                text,
+                &solid("F1F5FA"),
+                &outline("506080", 12_700),
+            )
+            .replace("wrap='none'", "wrap='square'"),
+        )
+    };
+    let long = "Measured words wrap into several lines inside this box. Every line uses actual shaped glyph advances and preserves readable text.";
+    let mixed = format!(
+        "<a:p>{}<a:r><a:rPr sz='2400' b='1' i='1'><a:latin typeface='O2P Test Sans'/>{}</a:rPr><a:t>bold italic red words continue across several wrapped lines </a:t></a:r>{}</a:p>",
+        run("Normal text leads into "),
+        solid("C81428"),
+        run("and normal text resumes here.")
+    );
+    vec![
+        (
+            "wrapping-short.pptx",
+            deck(&paragraph("Short text", "l"), 3_810_000),
+        ),
+        ("wrapping-long.pptx", deck(&paragraph(long, "l"), 3_810_000)),
+        (
+            "multiple-paragraphs-wrapped.pptx",
+            deck(
+                &format!(
+                    "{}<a:p><a:endParaRPr sz='1200'/></a:p>{}",
+                    paragraph(
+                        "First paragraph wraps with several measured words on each line.",
+                        "l"
+                    ),
+                    paragraph(
+                        "Another paragraph starts below the empty paragraph and also wraps.",
+                        "l"
+                    )
+                ),
+                4_572_000,
+            ),
+        ),
+        ("mixed-runs-wrapped.pptx", deck(&mixed, 4_572_000)),
+        (
+            "centered-wrapped.pptx",
+            deck(&paragraph(long, "ctr"), 3_810_000),
+        ),
+        (
+            "right-aligned-wrapped.pptx",
+            deck(&paragraph(long, "r"), 3_810_000),
+        ),
+        (
+            "unicode-wrapped.pptx",
+            deck(
+                &format!(
+                    "{}{}<a:p><a:r><a:rPr sz='2000'><a:latin typeface='O2P Test Arabic'/></a:rPr><a:t>مرحبا مرحبا مرحبا مرحبا مرحبا</a:t></a:r></a:p>",
+                    paragraph("Résumé café ạ́ ffi Résumé café ạ́ ffi", "l"),
+                    paragraph("日本語 日本語 日本語 日本語 日本語", "l")
+                ),
+                4_572_000,
+            ),
+        ),
+        ("overflow-text.pptx", deck(&paragraph(long, "l"), 533_400)),
+        (
+            "long-unbroken-word.pptx",
+            deck(
+                &paragraph(
+                    "SupercalifragilisticexpialidociousffiSupercalifragilisticexpialidocious",
+                    "l",
+                ),
+                3_810_000,
+            ),
+        ),
+    ]
+}

@@ -144,3 +144,31 @@ explicit `O2P Test Sans` / `O2P Test Arabic` typefaces: ASCII, Résumé, ffi,
 combining marks, Greek/Cyrillic, 日本語 and Arabic. It contains no embedded fonts;
 register the licensed [font fixtures](../fonts/README.md) for Unicode rendering.
 The existing generator reproduces it alongside all earlier fixtures.
+
+
+## Milestone 1G-B wrapping fixtures
+
+Regenerate with `cargo run --offline -p o2p-pptx --example generate_fixtures`.
+These original fixtures have direct typefaces, square wrapping and outlined
+220-point-wide boxes with default insets. Use the existing licensed
+[font fixtures](../fonts/README.md) with `--font-dir fixtures/fonts`.
+
+| Fixture | Purpose |
+| --- | --- |
+| `wrapping-short.pptx` | One measured line |
+| `wrapping-long.pptx` | Whitespace wrapping across many lines |
+| `multiple-paragraphs-wrapped.pptx` | Wrapped paragraphs separated by a blank paragraph |
+| `mixed-runs-wrapped.pptx` | Regular, bold italic red 24pt, then regular 20pt across lines |
+| `centered-wrapped.pptx` | Center each measured wrapped line |
+| `right-aligned-wrapped.pptx` | Right-align each measured wrapped line |
+| `unicode-wrapped.pptx` | Résumé/café, combining marks, ffi, 日本語 and Arabic |
+| `overflow-text.pptx` | 42pt-high box; retain wrapped text and warn |
+| `long-unbroken-word.pptx` | Deterministic shaping-cluster fallback |
+
+```sh
+cargo run --offline -p o2p-cli -- convert fixtures/pptx/mixed-runs-wrapped.pptx -o target/mixed-runs-wrapped.pdf --font-dir fixtures/fonts --fallback-family "O2P Test Sans"
+```
+
+All prior fixture bytes remain unchanged. The legacy CLI path without fonts
+continues unwrapped standard-font rendering; these layout fixtures exercise the
+configured Unicode path. Embedding and logical Unicode mappings remain tested.

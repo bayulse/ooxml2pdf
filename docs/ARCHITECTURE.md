@@ -1,5 +1,5 @@
 This document records completed milestones chronologically. The final Milestone
-1G-A section describes the current configured-font path; earlier standard-font
+1G-B section describes the current configured-font path; earlier standard-font
 descriptions remain the compatibility-path history.
 
 # Milestone 0: Common DisplayList to PDF
@@ -924,3 +924,72 @@ Themes, master/layout font inheritance, wrapping/reflow/autofit, character
 spacing, bullets/numbering, rotation/vertical text, paragraph-wide cross-style
 bidi, font subsetting and unsupported font technologies remain deferred. DOCX,
 XLSX, Flutter, charts and SmartArt are unchanged and unimplemented.
+
+
+# Milestone 1G-B: Measured text wrapping and paragraph layout
+
+Baseline: committed `359f092` (Milestone 1G-A). The configured-font pipeline is:
+
+```text
+PPTX normalized text semantics / textbox geometry
+  -> generic o2p-layout paragraphs / font requests / inset rectangle
+  -> o2p-fonts Unicode shaping / cluster ranges / glyph advances
+  -> o2p-layout measured lines / positioned styled glyph runs
+  -> o2p-core DisplayList -> unchanged o2p-pdf serialization
+```
+
+The new small `o2p-layout` crate depends on core, fonts and the already-present
+permissively licensed `unicode-segmentation`. Core remains dependency-free;
+fonts are unchanged; PDF still only validates/serializes drawing operations.
+A separate crate avoids adding a shaping dependency cycle to core and avoids
+embedding format-specific layout inside PDF. This is an incremental extraction
+of configured text placement, not a font subsystem rewrite.
+
+The generic contract uses owned styled `TextRun`, `Paragraph` and measured
+`Line` values. `layout()` receives an already-inset rectangle and a resolver,
+returning positioned core glyph runs, font diagnostics and overflow state.
+PPTX translates its existing family/weight/italic/color/size and alignment into
+these types; public PPTX/core/PDF APIs remain available without changed fields.
+Its adapter emits lines in place of the original textbox, preserving
+fill/outline/text and shape/image z-order.
+
+Mandatory breaks split first. Runs are shaped once for glyph measurements;
+logical UTF-8 intervals are intersected with full-text grapheme boundaries to
+form safe wrapping atoms. Greedy wrapping prefers fitting whitespace and uses
+cluster boundaries for long tokens. Whitespace is retained and measured.
+Chosen fragments are reshaped at actual line edges and rechecked, retreating
+when context changed their width. Single oversized clusters still advance the
+cursor and produce overflow. No scalar-count/ASCII-width estimate is involved.
+Styles and logical source mappings survive fragmentation, including ligatures,
+combining marks and fallback-font segments.
+
+Each final line's width is the sum of emitted shaped advances. Left/center/right
+x offsets are respectively 0, half the remaining inner width, or all of it.
+The baseline is top + maximum nonempty run size; line advance is 1.2 times
+that size. Blank lines use the resolved paragraph end size. All paragraph lines
+stack consecutively from the top inset; no PowerPoint spacing/autofit is implied.
+Vertical sizing is nominal, not an ink-bound calculation.
+
+One deterministic structured `TextLayoutWarningKind::Overflow` is returned per
+textbox whose final line width or nominal stacked line height exceeds its
+inset rectangle. Text remains present without textbox clipping or shrinking;
+PDF's existing page-boundary clipping is unchanged. Parser overflow diagnostics
+are explicitly labeled legacy/unwrapped to distinguish the compatibility path.
+Square/default wrapping works with configured fonts. Explicit no-wrap/unknown
+modes warn and use wrapping; the unchanged legacy API remains unwrapped.
+
+Unicode scope is whitespace-based, with grapheme/shaping-cluster-safe emergency
+breaks and line-edge reshaping. Full Unicode breaking, hyphenation, cross-style
+shaping and paragraph-wide bidi remain deferred. Explicit byte/run/paragraph
+and reshaping-work limits return owned errors; invalid geometry never produces
+nonfinite positioned output. See [FONTS.md](FONTS.md) for the algorithm, limits,
+line-height/alignment formulas, whitespace policy and precise Unicode caveats.
+
+Nine reproducible PPTX wrapping fixtures, generic layout tests, integrated
+PPTX/PDF tests and a CLI mixed-style test cover measurement, exact fits,
+whitespace/explicit breaks, oversized clusters/words, paragraphs/empty lines,
+all alignments, styles, source safety and deterministic overflow. Existing
+text/font/shape/image/z-order tests remain. Embedded fonts, ToUnicode and
+ActualText are verified independently; visual Poppler QA checks mixed styling,
+center/right lines and accented Latin/Japanese/Arabic. No advanced typography,
+themes/masters/layouts, DOCX/XLSX, Flutter, charts or SmartArt is introduced.

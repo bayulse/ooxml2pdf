@@ -384,7 +384,7 @@ fn body_features_warn_and_vertical_or_rotated_text_is_omitted_but_shape_survives
         "<a:ln><a:noFill/></a:ln>",
     );
     for (body, warning_name, rendered) in [
-        ("wrap='square'", "text wrapping", true),
+        ("wrap='unknown'", "text wrapping", true),
         ("anchor='ctr'", "vertical anchor", true),
         ("vert='vert'", "vertical text", false),
         ("rot='60000'", "text rotation", false),

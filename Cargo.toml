@@ -1,5 +1,5 @@
 [workspace]
-members = ["crates/o2p-core", "crates/o2p-fonts", "crates/o2p-pdf", "crates/o2p-cli", "crates/o2p-ooxml", "crates/o2p-pptx"]
+members = ["crates/o2p-core", "crates/o2p-fonts", "crates/o2p-layout", "crates/o2p-pdf", "crates/o2p-cli", "crates/o2p-ooxml", "crates/o2p-pptx"]
 resolver = "3"
 
 [workspace.package]
@@ -8,6 +8,7 @@ edition = "2024"
 rust-version = "1.85"
 
 [workspace.dependencies]
+o2p-layout = { path = "crates/o2p-layout" }
 o2p-fonts = { path = "crates/o2p-fonts" }
 harfrust = { version = "=0.14.0", default-features = false, features = ["std"] }
 ttf-parser = { version = "=0.25.1", default-features = false, features = ["std"] }

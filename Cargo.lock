@@ -422,6 +422,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "o2p-layout"
+version = "0.1.0"
+dependencies = [
+ "o2p-core",
+ "o2p-fonts",
+ "unicode-segmentation",
+]
+
+[[package]]
 name = "o2p-ooxml"
 version = "0.1.0"
 dependencies = [
@@ -452,6 +461,7 @@ dependencies = [
  "lopdf",
  "o2p-core",
  "o2p-fonts",
+ "o2p-layout",
  "o2p-ooxml",
  "o2p-pdf",
  "roxmltree",

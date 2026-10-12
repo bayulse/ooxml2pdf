@@ -773,7 +773,7 @@ impl Parser<'_> {
                 self.warn("connector text is not rendered".into());
             } else if let Some(text) = self.text_box(body, rect)? {
                 if text.layout().1 {
-                    self.warn("text box overflow: unwrapped text exceeds the inner box".into());
+                    self.warn("legacy text box overflow: unwrapped text exceeds the inner box; configured-font overflow is reported after wrapping".into());
                 }
                 shapes.push(Shape::TextBox(text));
             }

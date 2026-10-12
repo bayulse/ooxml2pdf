@@ -47,8 +47,10 @@ impl Parser<'_> {
                 self.warn("text rotation: text omitted".into());
                 supported = false;
             }
-            if properties.attribute("wrap").is_some_and(|v| v != "none") {
-                self.warn("text wrapping: rendering explicit breaks only".into());
+            match properties.attribute("wrap") {
+                None | Some("square") => {}
+                Some("none") => self.warn("text wrapping disabled: configured-font layout uses wrapping; legacy layout uses explicit breaks only".into()),
+                Some(_) => self.warn("unsupported text wrapping mode: configured-font layout uses whitespace wrapping".into()),
             }
             self.element_only(properties)?;
             for child in properties.children().filter(|n| n.is_element()) {

@@ -82,7 +82,8 @@ Render basic Unicode text alongside shapes and images:
 cargo run -p o2p-cli -- convert fixtures/pptx/text-with-image.pptx -o target/text-with-image.pdf
 ```
 
-Text uses deterministic spacing without wrapping or autofit; box overflow warns.
+Text uses deterministic spacing; configured fonts enable measured wrapping.
+Box overflow warns, and autofit remains unsupported.
 Malformed supported media fails before writing output. The backend bounds image
 decoding to 16,777,216 pixels, 16,384 pixels per dimension and 128 MiB decoder
 allocation. Resources share encoded bytes; decoded pixels are released per image.
@@ -113,3 +114,14 @@ library API. Fallback substitutions and missing glyphs are reported. CFF, color,
 bitmap, variable fonts and collections are rejected explicitly. See
 [font ownership, shaping and fidelity](docs/FONTS.md) and
 [test font licensing](fixtures/fonts/README.md).
+
+
+Measured wrapping and paragraph layout use the configured-font path:
+
+```sh
+cargo run --offline -p o2p-cli -- convert fixtures/pptx/mixed-runs-wrapped.pptx -o target/mixed-runs-wrapped.pdf --font-dir fixtures/fonts --fallback-family "O2P Test Sans"
+```
+
+Styles survive wrapping and each line is aligned using its shaped width.
+Overflow retains all text and reports a warning. See [text layout](docs/FONTS.md)
+for the line-height, whitespace and Unicode scope.

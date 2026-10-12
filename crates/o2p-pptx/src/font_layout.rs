@@ -1,6 +1,6 @@
-//! The existing unwrapped layout policy, measured with configured shaped fonts.
-use crate::{Presentation, TextAlignment, TextBox, TextStyle};
-use o2p_core::{DisplayList, DrawOp, GlyphTextOp, Point};
+//! Adapt PPTX semantics to generic measured text layout.
+use crate::{Presentation, TextAlignment, TextBox};
+use o2p_core::{DisplayList, DrawOp, Point, Rect, Size};
 use o2p_fonts::{FontError, FontRequest, FontResolver, FontWarning};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -74,85 +74,61 @@ impl TextBox {
         &self,
         resolver: &dyn FontResolver,
     ) -> Result<(Vec<DrawOp>, Vec<FontWarning>, bool), FontError> {
-        let mut ops = Vec::new();
-        let mut warnings = Vec::new();
-        let mut top = f64::from(self.rect.origin.y) + f64::from(self.insets.top);
-        let left = f64::from(self.rect.origin.x) + f64::from(self.insets.left);
-        let width = (f64::from(self.rect.size.width)
-            - f64::from(self.insets.left)
-            - f64::from(self.insets.right))
-        .max(0.0);
-        let bottom = f64::from(self.rect.origin.y) + f64::from(self.rect.size.height)
-            - f64::from(self.insets.bottom);
-        let mut overflow = false;
-        for paragraph in &self.paragraphs {
-            let mut lines: Vec<Vec<(&str, &TextStyle)>> = vec![vec![]];
-            for run in &paragraph.runs {
-                for (index, segment) in run.text.split('\n').enumerate() {
-                    if index > 0 {
-                        lines.push(vec![]);
-                    }
-                    if let Some(line) = lines.last_mut() {
-                        line.push((segment, &run.style));
-                    }
-                }
-            }
-            let last = lines.len() - 1;
-            for (index, line) in lines.into_iter().enumerate() {
-                let mut size = line
+        let paragraphs: Vec<_> = self
+            .paragraphs
+            .iter()
+            .map(|paragraph| o2p_layout::Paragraph {
+                runs: paragraph
+                    .runs
                     .iter()
-                    .filter(|(s, _)| !s.is_empty())
-                    .map(|(_, s)| f64::from(s.font_size))
-                    .fold(0.0, f64::max);
-                if size == 0.0 {
-                    size = f64::from(paragraph.end_style.font_size);
-                }
-                if index == last && line.iter().all(|(s, _)| s.is_empty()) {
-                    size = size.max(f64::from(paragraph.end_style.font_size));
-                }
-                let mut shaped = Vec::new();
-                let mut line_width = 0.0;
-                for (text, style) in line {
-                    if text.is_empty() {
-                        continue;
-                    }
-                    let request = FontRequest {
-                        family: style.family.clone().unwrap_or_else(|| "sans-serif".into()),
-                        weight: if style.bold { 700 } else { 400 },
-                        italic: style.italic,
-                    };
-                    let report = o2p_fonts::shape(resolver, text, &request, style.font_size)?;
-                    for warning in report.warnings {
-                        if !warnings.contains(&warning) {
-                            warnings.push(warning);
-                        }
-                    }
-                    line_width += f64::from(report.text.advance.x);
-                    shaped.push((report.text, style.color));
-                }
-                let mut x = left
-                    + match paragraph.alignment {
-                        TextAlignment::Left => 0.0,
-                        TextAlignment::Center => (width - line_width) / 2.0,
-                        TextAlignment::Right => width - line_width,
-                    };
-                let baseline = top + size;
-                overflow |= line_width > width || baseline > bottom || top + size * 1.2 > bottom;
-                for (text, color) in shaped {
-                    let advance = text.advance.x;
-                    ops.push(DrawOp::GlyphText(GlyphTextOp {
-                        origin: Point {
-                            x: x as f32,
-                            y: baseline as f32,
+                    .map(|run| o2p_layout::TextRun {
+                        text: run.text.clone(),
+                        font: FontRequest {
+                            family: run
+                                .style
+                                .family
+                                .clone()
+                                .unwrap_or_else(|| "sans-serif".into()),
+                            weight: if run.style.bold { 700 } else { 400 },
+                            italic: run.style.italic,
                         },
-                        text,
-                        color,
-                    }));
-                    x += f64::from(advance);
-                }
-                top += size * 1.2;
-            }
-        }
-        Ok((ops, warnings, overflow))
+                        font_size: run.style.font_size,
+                        color: run.style.color,
+                    })
+                    .collect(),
+                alignment: match paragraph.alignment {
+                    TextAlignment::Left => o2p_layout::Alignment::Left,
+                    TextAlignment::Center => o2p_layout::Alignment::Center,
+                    TextAlignment::Right => o2p_layout::Alignment::Right,
+                },
+                empty_font_size: paragraph.end_style.font_size,
+            })
+            .collect();
+        let layout = o2p_layout::layout(
+            &paragraphs,
+            Rect {
+                origin: Point {
+                    x: (f64::from(self.rect.origin.x) + f64::from(self.insets.left)) as f32,
+                    y: (f64::from(self.rect.origin.y) + f64::from(self.insets.top)) as f32,
+                },
+                size: Size {
+                    width: (f64::from(self.rect.size.width)
+                        - f64::from(self.insets.left)
+                        - f64::from(self.insets.right))
+                    .max(0.0) as f32,
+                    height: (f64::from(self.rect.size.height)
+                        - f64::from(self.insets.top)
+                        - f64::from(self.insets.bottom))
+                    .max(0.0) as f32,
+                },
+            },
+            resolver,
+        )?;
+        let ops = layout
+            .lines
+            .into_iter()
+            .flat_map(|line| line.runs.into_iter().map(DrawOp::GlyphText))
+            .collect();
+        Ok((ops, layout.warnings, layout.overflow))
     }
 }

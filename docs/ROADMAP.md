@@ -201,6 +201,33 @@ extraction limits. Full PowerPoint typography, inherited/theme/OOXML embedded
 fonts, wrapping/reflow/autofit, bullets, vertical/rotated text, cross-style bidi,
 subsetting, variable/color/CFF fonts and mobile integration remain later work.
 
+## Milestone 1G-B — Measured wrapping and paragraph layout (complete)
+
+Baseline: `359f092`. Configured-font conversion now adds:
+
+- Generic `o2p-layout` styled paragraphs, measured lines and positioned glyph runs.
+- Actual shaped glyph advances for whitespace wrapping and cluster-safe fallback.
+- Line-edge reshaping, explicit breaks, blank lines and oversized-cluster progress.
+- Run font/style/color/size preservation and per-line left/center/right alignment.
+- Insets, consecutive paragraph stacking and deterministic 1.2-times-size lines.
+- One structured overflow warning per textbox; all text retained without clipping,
+  autofit or font shrinking. The legacy unwrapped API remains available.
+- Nine synthetic PPTX fixtures, existing licensed Unicode fonts, generic/PPTX/PDF
+  regression tests, CLI conversion and visual/extraction QA.
+- Unchanged font subsystem, embedded resources, ToUnicode and ActualText.
+- Reuse of existing Unicode segmentation; no new third-party dependency/service.
+
+```sh
+cargo run --offline -p o2p-cli -- convert fixtures/pptx/mixed-runs-wrapped.pptx -o target/mixed-runs-wrapped.pdf --font-dir fixtures/fonts --fallback-family "O2P Test Sans"
+```
+
+See [FONTS.md](FONTS.md) for exact line-breaking, line-height, alignment,
+whitespace, overflow and limit behavior. Complete Unicode line breaking,
+hyphenation, cross-style/paragraph-wide bidi, autofit, no-wrap mode, font shrinking,
+rotation/vertical text, bullets/numbering, spacing/decorations, themes and
+master/layout inheritance remain deferred, alongside unsupported font
+technologies/subsetting and other document formats/mobile integration.
+
 ## Validation
 
 ```sh

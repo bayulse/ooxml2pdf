@@ -44,6 +44,76 @@ fn convert(input: &Path, output: &Path) -> std::process::Output {
 }
 
 #[test]
+fn wrapped_cli_fixture_preserves_fonts_styles_positions_and_searchable_text() {
+    let directory = TestDirectory::new();
+    let destination = directory.0.join("mixed-runs-wrapped.pdf");
+    let font_directory = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../fixtures/fonts");
+    let convert = || {
+        Command::new(env!("CARGO_BIN_EXE_o2p"))
+            .arg("convert")
+            .arg(fixture("mixed-runs-wrapped.pptx"))
+            .arg("-o")
+            .arg(&destination)
+            .arg("--font-dir")
+            .arg(&font_directory)
+            .arg("--fallback-family")
+            .arg("O2P Test Sans")
+            .output()
+            .unwrap()
+    };
+    let output = convert();
+    assert!(
+        output.status.success(),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let warnings = String::from_utf8_lossy(&output.stderr);
+    assert!(!warnings.contains("MissingGlyph") && !warnings.contains(": Overflow"));
+    let bytes = fs::read(&destination).unwrap();
+    let pdf = lopdf::Document::load_mem(&bytes).unwrap();
+    let text: String = pdf
+        .extract_text(&[1])
+        .unwrap()
+        .chars()
+        .filter(|c| !c.is_whitespace())
+        .collect();
+    assert!(text.contains("Normaltextleadsinto"));
+    assert!(text.contains("bolditalicredwordscontinueacrossseveralwrappedlines"));
+    assert!(text.contains("andnormaltextresumeshere."));
+    assert!(
+        pdf.objects
+            .values()
+            .any(|o| o.as_dict().is_ok_and(|d| d.has(b"FontFile2")))
+    );
+    assert!(
+        pdf.objects
+            .values()
+            .filter(|o| o.as_dict().is_ok_and(|d| d.has(b"ToUnicode")))
+            .count()
+            >= 2
+    );
+    let content =
+        lopdf::content::Content::decode(&pdf.get_page_content(pdf.get_pages()[&1]).unwrap())
+            .unwrap();
+    let baselines: std::collections::BTreeSet<_> = content
+        .operations
+        .iter()
+        .filter(|op| op.operator == "Tm")
+        .map(|op| op.operands[5].as_float().unwrap().to_bits())
+        .collect();
+    assert!(baselines.len() >= 4);
+    assert!(content.operations.iter().any(|op| op.operator == "BDC"));
+    assert!(content.operations.iter().any(|op| {
+        op.operator == "rg"
+            && op.operands[0]
+                .as_float()
+                .is_ok_and(|red| (red - 200.0 / 255.0).abs() < 0.00001)
+    }));
+    assert!(convert().status.success());
+    assert_eq!(fs::read(destination).unwrap(), bytes);
+}
+
+#[test]
 fn configured_fonts_embed_unicode_without_missing_japanese_and_preserve_cli_output_on_error() {
     let directory = TestDirectory::new();
     let output = directory.0.join("embedded.pdf");

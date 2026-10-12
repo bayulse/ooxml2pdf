@@ -1,4 +1,4 @@
-# Fonts and text fidelity — Milestone 1G-A
+# Fonts and text fidelity — Milestones 1G-A / 1G-B
 
 Baseline: `v0.1.0-alpha.1` / `7fc634d`. This milestone adds configured Unicode
 text without replacing the completed package, shape, image, or legacy text paths.
@@ -70,13 +70,109 @@ layout/PDF boundary: shaping and resolution precede DisplayList construction;
 PDF performs no resolution, shaping, or Office layout. Existing `TextOp` remains
 the standard-font compatibility primitive.
 
-PPTX configured layout preserves explicit paragraphs/breaks, top alignment,
-insets, baseline = top + largest size, and 1.2 × size line spacing. Left/center/
-right alignment now uses shaped advances, including ligatures and positioning.
-It adds no wrapping, reflow, autofit, bullets, rotation, or vertical text. Bidi
-analysis across differently styled runs/whole paragraphs is deferred. Historical
-parser overflow warnings use legacy metrics; configured layout also reports
-overflow using actual shaped advances.
+Configured PPTX text now passes through `o2p-layout` for measured wrapping and
+paragraph placement before becoming core glyph operations. The font subsystem
+and PDF serialization remain unchanged. The legacy `to_display_list()` API and
+CLI without explicit font configuration retain the historical standard-font,
+unwrapped behavior. Use `to_display_list_with_fonts()` or CLI `--font` /
+`--font-dir` to obtain Unicode shaping and wrapping.
+
+## Measured line layout (Milestone 1G-B)
+
+`o2p-layout` accepts generic `TextRun` (literal text, `FontRequest`, font size,
+color), `Paragraph` (runs, alignment, empty-line size) and an already-inset point
+rectangle. Its report contains measured `Line` values, positioned `GlyphTextOp`
+runs, deduplicated font warnings and an overflow flag. PPTX owns the conversion
+from direct paragraph/run properties and textbox insets; no Office type enters
+layout, fonts, core or PDF. There is no new third-party dependency: layout reuses
+`unicode-segmentation` 1.12.0 (MIT OR Apache-2.0), already present in the lockfile.
+It adds no Unicode line-breaking library or mobile/runtime service.
+
+The algorithm is deliberately limited:
+
+1. Split mandatory newlines, keeping blank and trailing lines. Shape each
+   remaining styled fragment with the existing `o2p-fonts::shape` pipeline.
+2. Sort glyph source intervals into logical UTF-8 order, independently of visual
+   glyph order. Intersect safe shaping boundaries with extended grapheme
+   boundaries of the concatenated text, including across style boundaries.
+3. Accumulate actual glyph advances to find a fitting prefix. Prefer its last
+   whitespace boundary when more text follows; otherwise break at the last
+   fitting cluster. Nonbreaking U+00A0/U+202F spaces are not preferred breaks.
+   Preserve all whitespace, including separators at line ends; they participate
+   in measurement/alignment and remain in ActualText. Style boundaries alone
+   are not word boundaries. Exact fits are allowed (the estimate tolerates only
+   f32 rounding; final emitted widths are checked without that tolerance).
+4. Reshape the chosen fragments with their original font requests, sizes and
+   colors, using the actual line-edge context. If their final total advance
+   exceeds the box, retreat to an earlier whitespace/cluster boundary and
+   remeasure. A single oversized cluster is emitted with overflow; every
+   iteration consumes at least one cluster. No character-count or ASCII-width
+   estimate is used. Each final run owns new source-relative cluster ranges,
+   keeping ToUnicode and ActualText valid after wrapping.
+
+For every laid-out line, width is the f64 sum of its emitted
+`ShapedText.advance.x` values. Starting from the inner left edge, alignment adds
+0 for left, `(inner_width - line_width) / 2` for center, or
+`inner_width - line_width` for right. Adjacent styled fragments advance by their
+own shaped widths and share a baseline. Alignment never uses pre-wrap paragraph
+width. Font resources, weight/italic choice, color and size survive each split.
+
+The line-height policy intentionally preserves the preceding milestone:
+baseline = line top + largest nonempty run font size; line advance =
+**1.2 times that size**. Blank paragraphs and blank explicit-break lines use
+`endParaRPr`'s resolved size. Paragraphs stack their lines consecutively without
+additional before/after spacing. This is nominal line-box layout, not a promise
+that every font's ink bounds fit inside that line box; unusual ascenders,
+descenders and mark extents are not used for vertical spacing in this milestone.
+Horizontal advances come entirely from font shaping/metrics.
+
+Width and nominal line-box bottom are checked against the inset rectangle.
+PPTX reports one `TextLayoutWarningKind::Overflow` per affected textbox,
+identified by zero-based page and textbox indices, in deterministic order.
+All laid-out lines remain present, even below the box. There is no textbox
+clipping, truncation, autofit or font shrinking. Ordinary documented PDF page
+clipping still applies at the page edge. Historical parser diagnostics now say
+**legacy text box overflow**: they concern the unwrapped compatibility API and
+are separate from configured-font warnings measured after wrapping.
+
+Direct/default `bodyPr` square wrapping is supported on the configured path.
+Explicit `wrap="none"` receives a structured unsupported-behavior warning and
+uses wrapping there; the model has no new field that would break existing
+`TextBox` struct construction. The legacy path continues explicit breaks only.
+Unknown wrapping modes, autofit, non-top anchors, rotation/vertical text,
+bullets/numbering, spacing, decorations and other recognized unsupported
+properties retain structured parser warnings. Vertical/rotated text retains
+its documented omission behavior.
+
+Unicode limitations: this is whitespace wrapping with cluster-safe emergency
+breaks, not UAX #14, CJK punctuation rules, hyphenation or language-specific word
+segmentation. Emergency breaks may split a word/nonbreaking-space sequence,
+but cannot split the original shaping cluster or an extended grapheme. Shaping
+and bidi remain per styled fragment; paragraph-wide bidi ordering and shaping
+across style changes remain deferred. Reshaping at line edges preserves Arabic
+joining within fragments; reader-dependent RTL extraction remains as described
+below. Font coverage still depends on the explicitly configured fonts.
+
+Layout rejects invalid/nonfinite geometry and sizes with owned `FontError`
+values. Work is bounded to 16,000 bytes/runs per paragraph, 16,000 paragraphs,
+65,536 runs and 1 MiB source text per textbox. Additional partial-fragment
+reshaping is capped at 1 MiB processed bytes per paragraph, preventing
+pathological retreat from repeatedly shaping unbounded prefixes. These limits
+complement existing package, XML, shaping and PDF ceilings; they are not an
+exact total heap budget. Exceeding a limit returns a structured error rather
+than truncating text.
+
+```sh
+cargo run --offline -p o2p-cli -- convert fixtures/pptx/mixed-runs-wrapped.pptx -o target/mixed-runs-wrapped.pdf --font-dir fixtures/fonts --fallback-family "O2P Test Sans"
+```
+
+The nine wrapping fixtures cover short/long paragraphs, mixed runs, blank
+paragraphs, center/right alignment, oversized words, vertical overflow and
+accented Latin/Japanese/Arabic with the existing licensed fonts. Generic layout,
+PPTX/PDF and CLI tests verify width, source/cluster safety, styling, positioning,
+deterministic diagnostics, embedding and extraction. Development QA renders
+mixed, center/right and Unicode PDFs with Poppler, checks their visible layout,
+and independently extracts searchable text. Poppler remains a development tool.
 
 ## PDF representation and extraction
 
