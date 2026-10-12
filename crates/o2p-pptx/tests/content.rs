@@ -332,11 +332,15 @@ fn unsupported_shapes_text_styles_and_groups_produce_warnings() {
             0,
         ),
         (
-            base.replace("<a:xfrm>", "<a:xfrm rot='5400000'>"),
-            "rotation",
+            base.replace("<a:xfrm>", "<a:xfrm skew='5400000'>"),
+            "skew",
             0,
         ),
-        (base.replace("<a:xfrm>", "<a:xfrm flipH='1'>"), "flipH", 0),
+        (
+            base.replace("<a:xfrm>", "<a:xfrm perspective='1'>"),
+            "perspective",
+            0,
+        ),
         (
             base.replace("</p:sp>", "<p:style><a:fillRef idx='1'/></p:style></p:sp>"),
             "style",

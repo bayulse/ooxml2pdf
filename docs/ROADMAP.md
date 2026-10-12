@@ -228,6 +228,35 @@ rotation/vertical text, bullets/numbering, spacing/decorations, themes and
 master/layout inheritance remain deferred, alongside unsupported font
 technologies/subsetting and other document formats/mobile integration.
 
+## Milestone 1H — Individual element transforms (complete)
+
+Baseline: `d79950b`.
+
+- Add a minimal generic affine `Transform` and flat, balanced DisplayList scopes.
+- Parse off/ext/rot/flipH/flipV through one DrawingML transform adapter.
+- Centralize signed 1/60,000-degree conversion and integer-turn normalization.
+- Rotate/reflect rectangles, ellipses, straight lines, images and text-bearing
+  shapes about their explicit element center. Apply local flips before rotation.
+- Keep fill/outline/text together, XML z-order, existing bounds and measured
+  wrapping. Identity elements retain their previous drawing representation.
+- Apply native PDF graphics matrices; retain image XObjects, selectable Unicode
+  text, embedded fonts, ToUnicode and ActualText. No slide rasterization.
+- Warn/omit unsupported transform attributes/children and 3D elements; reject
+  malformed angles/booleans and invalid generic graphics scopes/matrices.
+- Add nine reproducible fixtures, core/PPTX/PDF/CLI transform tests and preserve
+  all existing shape, image, font, Unicode and wrapping regressions.
+- Reuse every existing dependency; runtime remains offline and Rust-native.
+
+```sh
+cargo run --offline -p o2p-cli -- convert fixtures/pptx/mixed-transforms.pptx -o target/mixed-transforms.pdf
+```
+
+Groups/nested coordinate spaces, skew/perspective/3D, independent bodyPr text
+rotation and vertical writing, advanced connectors, inheritance, charts,
+SmartArt, animations, DOCX/XLSX and Flutter remain deferred. See the final
+[ARCHITECTURE.md](ARCHITECTURE.md) section for the exact composition/coordinate
+contract and [FONTS.md](FONTS.md) for selection/search limits.
+
 ## Validation
 
 ```sh

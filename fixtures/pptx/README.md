@@ -172,3 +172,30 @@ cargo run --offline -p o2p-cli -- convert fixtures/pptx/mixed-runs-wrapped.pptx 
 All prior fixture bytes remain unchanged. The legacy CLI path without fonts
 continues unwrapped standard-font rendering; these layout fixtures exercise the
 configured Unicode path. Embedding and logical Unicode mappings remain tested.
+
+
+## Milestone 1H transform fixtures
+
+Regenerate with the existing `o2p-pptx` example. These nine original, minimal
+fixtures use direct off/ext, synthetic vector geometry, a four-color 2x2 PNG,
+and explicit text. No groups, inherited transforms or external assets occur.
+
+| Fixture | Purpose |
+| --- | --- |
+| rotated-rectangle-45.pptx | 45-degree fill and outline about a nonzero center |
+| rotated-rectangle-90.pptx | Exact quarter turn; preserve pre-rotation bounds |
+| rotated-ellipse.pptx | Native rotated ellipse fill and outline |
+| rotated-image.pptx | Quarter-turn quadrant PNG as an image XObject |
+| rotated-text.pptx | Shared rectangle/text rotation; Résumé/日本語/ffi wrapping |
+| flipped-horizontal.pptx | ABC labels reveal horizontal reflection |
+| flipped-vertical.pptx | ABC labels reveal vertical reflection |
+| flipped-and-rotated.pptx | Both flips composed with 45-degree rotation |
+| mixed-transforms.pptx | Nine elements: rotated shapes/text, shared PNG, flips and line |
+
+```sh
+cargo run --offline -p o2p-cli -- convert fixtures/pptx/mixed-transforms.pptx -o target/mixed-transforms.pdf
+```
+
+Add `--font-dir fixtures/fonts` to exercise embedded Unicode fonts and wrapping.
+Legacy font-resolution and unwrapped overflow warnings remain expected for text
+boxes. The transform fixtures contain no unsupported element transforms.

@@ -349,6 +349,12 @@ impl Presentation {
     }
 }
 
+/// DrawingML ST_Angle uses signed 1/60,000 degrees. Normalize whole turns
+/// in integer units before conversion, preserving negative rotations exactly.
+pub fn drawingml_rotation_to_degrees(units: i32) -> f32 {
+    (i64::from(units).rem_euclid(360 * 60_000) as f64 / 60_000.0) as f32
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

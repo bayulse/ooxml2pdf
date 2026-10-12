@@ -315,8 +315,8 @@ fn unsupported_formats_and_picture_behaviors_produce_structured_warnings() {
         ),
         ("<a:stretch><a:fillRect/></a:stretch>", "<a:tile/>", "tile"),
         ("<a:fillRect/>", "<a:fillRect l='10000'/>", "stretch"),
-        ("<a:xfrm>", "<a:xfrm rot='60000'>", "rotation"),
-        ("<a:xfrm>", "<a:xfrm flipH='1'>", "flipH"),
+        ("<a:xfrm>", "<a:xfrm skew='60000'>", "skew"),
+        ("<a:xfrm>", "<a:xfrm perspective='1'>", "perspective"),
         (
             "r:embed='rImage'/>",
             "r:embed='rImage'><a:alphaModFix amt='50000'/></a:blip>",

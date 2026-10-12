@@ -1,6 +1,7 @@
-This document records completed milestones chronologically. The final Milestone
-1G-B section describes the current configured-font path; earlier standard-font
-descriptions remain the compatibility-path history.
+This document records completed milestones chronologically. Milestone 1G-B
+describes the current configured-font layout path and the final Milestone 1H
+section adds individual element transforms; earlier standard-font descriptions
+remain the compatibility-path history.
 
 # Milestone 0: Common DisplayList to PDF
 
@@ -993,3 +994,120 @@ text/font/shape/image/z-order tests remain. Embedded fonts, ToUnicode and
 ActualText are verified independently; visual Poppler QA checks mixed styling,
 center/right lines and accented Latin/Japanese/Arabic. No advanced typography,
 themes/masters/layouts, DOCX/XLSX, Flutter, charts or SmartArt is introduced.
+
+
+# Milestone 1H: Individual element transforms
+
+Baseline: committed `d79950b` (Milestone 1G-B). The pipeline is:
+
+```text
+PPTX a:xfrm -> normalized Shape::Transformed (geometry + optional text)
+             -> generic Transform / DisplayList scope -> PDF graphics matrix
+```
+
+No dependencies, font/layout changes, package changes, or architectural rewrite
+are introduced. `o2p-core` remains dependency-free and contains no PPTX fields.
+All original position and size fields remain in page coordinates. Identity
+transforms keep the original normalized variants and drawing operations.
+
+## Coordinate system and composition
+
+Core's `Transform { a, b, c, d, e, f }` is a six-coefficient affine matrix:
+`x' = a*x + c*y + e`, `y' = b*x + d*y + f`. Coordinates are points, origin is
+at the top left, x grows right and y grows down. Positive rotation is clockwise.
+Generic helpers provide translation and rotation/reflection about a center.
+The PPTX adapter reads explicit `a:xfrm/off` and `ext` with the existing bounded
+EMU conversion; extents describe the element BEFORE rotation, never a rotated
+axis-aligned bounding box. Zero extents and signed offsets remain valid.
+
+DrawingML `rot` is a signed ST_Angle integer in **1/60,000 degree** units.
+`drawingml_rotation_to_degrees` centralizes conversion: normalize integer units
+modulo 21,600,000, then divide in f64 and round to f32. Thus -90 degrees is
+270 degrees and full turns are identity. Exact quarter turns use exact sine and
+cosine values. Malformed/out-of-range signed i32 angles and invalid booleans
+return owned `InvalidSlide` errors. Missing rotation/flips use zero/false;
+XML boolean spellings 0/1/false/true are accepted.
+
+For offset `o=(x,y)` and local center `c=(width/2,height/2)`, using column vectors:
+
+```text
+M_local = T(o) * T(c) * R(clockwise degrees) * F(flipH,flipV) * T(-c)
+F = diag(flipH ? -1 : 1, flipV ? -1 : 1)
+```
+
+This is the graphics composition order: translation -> center adjustment ->
+rotation -> flip -> centered local drawing. Matrices act right to left on points:
+subtract the local center, flip along local axes, rotate, restore the center,
+then translate to the slide. Flips occur BEFORE rotation; reversing R and F
+changes a single-flip + 90-degree result. Both flips equal a 180-degree rotation
+about the same center. This follows the individual-shape transformation subset
+in the [ECMA-376 primer](https://c-rex.net/samples/ooxml/e1/Part3/OOXML_P3_Primer_Shape_topic_ID0EDMMO.html).
+
+Existing primitives and laid-out text already contain their slide offset. The
+adapter therefore emits the equivalent page-coordinate matrix:
+`M_page = T(o+c) * R * F * T(-(o+c))`. The intended center `(x+width/2,y+height/2)`
+is fixed; no element rotates around the page origin. Text insets, baselines and
+wrapping use the original bounds and are transformed only after layout.
+
+## DisplayList and PDF
+
+`DrawOp::BeginTransform(Transform)` and `EndTransform` delimit one individual
+element's fill, outline, image and/or text in their existing order. Normalized
+`Shape::Transformed { transform, element }` owns only that element's supported
+geometry and text, not a DrawingML group. Straight lines use the same transform
+path as rectangles, ellipses and pictures, replacing the old endpoint-only flip
+implementation with equivalent visual geometry. No XML element is reordered.
+
+Scopes are flat, balanced within each page and cannot nest in this milestone.
+The renderer rejects nested/unbalanced scopes, singular/nonfinite matrices,
+PDF matrix conversion overflow and nonfinite transformed drawing positions with
+indexed `PdfError::InvalidGeometry`. Resource collection still visits the flat
+paint sequence; images and fonts remain shared and serialized once.
+
+All primitive renderers retain their existing bottom-left PDF placement. With
+`P(x,y)=(x,page_height-y)`, PDF uses `P * M_page * P`:
+`[a,-b,-c,d,c*page_height+e,page_height*(1-d)-f]`. Each element emits `q`, `cm`,
+its original drawing operations (each with its original local q/Q), and `Q`.
+The next element cannot inherit its matrix. The backend sees only generic
+transforms and does not know the input format.
+
+Images stay native PDF image XObjects; no slide rasterization occurs. Rotated
+and reflected text remains real text: the existing standard-font or Type0 /
+CIDFontType2 path, FontFile2, CIDToGIDMap, ToUnicode and ActualText are unchanged.
+Rotation/reflection applies to the complete text-bearing element, including
+its text. Reader-specific mirrored/rotated selection and RTL extraction remain
+viewer-dependent; semantic source mappings are retained. See FONTS.md.
+
+## Supported subset and validation
+
+Nine minimal synthetic fixtures cover 45/90-degree rectangles, ellipse, image,
+wrapped Unicode text, horizontal and vertical flips, both flips with rotation,
+and a mixed slide with vector, raster and text paint. The asymmetric 2x2 color image
+and ABC labels make orientation visible. Tests verify parsing/unit conversion,
+centers, noncommuting composition, all primitives, fill/outline/text scopes,
+z-order, image resource reuse, unchanged wrapping and Unicode extraction,
+malformed matrices/values and all completed-milestone regressions.
+
+```sh
+cargo run --offline -p o2p-cli -- convert fixtures/pptx/mixed-transforms.pptx -o target/mixed-transforms.pdf
+cargo run --offline -p o2p-cli -- convert fixtures/pptx/mixed-transforms.pptx -o target/mixed-transforms-fonts.pdf --font-dir fixtures/fonts
+```
+
+Groups, nested coordinate spaces and root group transforms remain unsupported;
+only the existing empty/all-zero root group scaffolding is accepted. Unknown
+transform attributes/children (including chOff/chExt on individual elements)
+produce structured slide warnings and omit the element. Shape 3D scene/properties
+warn and omit the element; picture effects retain existing omission behavior.
+Independent bodyPr text rotation, vertical writing, skew, perspective, 3D,
+advanced connectors, inheritance/themes/masters/layouts, charts, SmartArt and
+animations remain unsupported. These features produce structured warnings;
+malformed supported values produce errors. DOCX, XLSX and Flutter remain out of
+scope. Full Office typography and inheritance fidelity are not implied.
+
+Development QA: `cargo fmt`, workspace clippy with all targets/features, and all
+197 workspace tests passed. Poppler-rendered default/configured mixed slides and
+the rotated Unicode textbox were visually inspected: clockwise centers,
+quadrant-image orientation, reflected ABC text, shared borders/text and wrapped
+Unicode fit as intended. Independent Poppler extraction recovered rotated
+Résumé/日本語/ffi and the mirrored ABC labels. Poppler is a development QA tool,
+not a runtime dependency.

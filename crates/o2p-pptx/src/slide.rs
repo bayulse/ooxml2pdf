@@ -1,7 +1,7 @@
 //! PresentationML/DrawingML semantics, isolated from OPC and PDF rendering.
 #[path = "text.rs"]
 mod text;
-use o2p_core::{Color, ImageFormat, ImageOp, ImageResource, Point, Rect, Size};
+use o2p_core::{Color, ImageFormat, ImageOp, ImageResource, Point, Rect, Size, Transform};
 use o2p_ooxml::{OoxmlPackage, RelationshipTarget};
 use roxmltree::Node;
 use std::{collections::BTreeMap, sync::Arc};
@@ -99,7 +99,7 @@ pub(super) fn parse(
                         match (node.tag_name().namespace(), node.tag_name().name()) {
                             (Some(ns), "pic") if ns == pml => {
                                 if let Some(image) = parser.picture(node)? {
-                                    slide.shapes.push(Shape::Image(image));
+                                    slide.shapes.push(image);
                                 }
                             }
                             (Some(ns), "sp" | "cxnSp") if ns == pml => {
@@ -128,7 +128,7 @@ struct Parser<'a> {
 }
 
 impl Parser<'_> {
-    fn picture(&mut self, node: Node<'_, '_>) -> Result<Option<ImageOp>, PptxError> {
+    fn picture(&mut self, node: Node<'_, '_>) -> Result<Option<Shape>, PptxError> {
         let pml = self.pml;
         let dml = self.dml;
         let rel = if pml == PML { REL } else { STRICT_REL };
@@ -305,32 +305,70 @@ impl Parser<'_> {
             self.warn("inherited picture transform: picture omitted".into());
             return Ok(None);
         };
-        self.attributes(transform, &["rot", "flipH", "flipV"]);
-        if transform.attribute("rot").is_some()
-            && self.integer(transform, "rot", i64::from(i32::MIN), i64::from(i32::MAX))? != 0
-        {
-            self.warn("picture rotation: picture omitted".into());
-            supported = false;
+        let Some((rect, transform)) = self.transform(transform)? else {
+            return Ok(None);
+        };
+        if !supported {
+            return Ok(None);
         }
-        for name in ["flipH", "flipV"] {
-            if let Some(value) = transform.attribute(name) {
-                match value {
-                    "0" | "false" => {}
-                    "1" | "true" => {
-                        self.warn(format!("picture {name}: picture omitted"));
-                        supported = false;
-                    }
+        let image = self
+            .images
+            .entry(target.clone())
+            .or_insert_with(|| {
+                Arc::new(ImageResource {
+                    format,
+                    bytes: Arc::from(media.bytes()),
+                })
+            })
+            .clone();
+        let image = Shape::Image(ImageOp { rect, image });
+        Ok(Some(if transform == Transform::IDENTITY {
+            image
+        } else {
+            Shape::Transformed {
+                transform,
+                element: vec![image],
+            }
+        }))
+    }
+
+    fn transform(&mut self, node: Node<'_, '_>) -> Result<Option<(Rect, Transform)>, PptxError> {
+        self.attributes(node, &["rot", "flipH", "flipV"]);
+        let degrees = if node.attribute("rot").is_some() {
+            crate::drawingml_rotation_to_degrees(self.integer(
+                node,
+                "rot",
+                i64::from(i32::MIN),
+                i64::from(i32::MAX),
+            )? as i32)
+        } else {
+            0.0
+        };
+        let mut flips = [false; 2];
+        for (index, name) in ["flipH", "flipV"].into_iter().enumerate() {
+            if let Some(value) = node.attribute(name) {
+                flips[index] = match value.trim() {
+                    "0" | "false" => false,
+                    "1" | "true" => true,
                     _ => return Err(self.invalid(format!("invalid boolean {name}"))),
-                }
+                };
             }
         }
-        self.other_children(transform, &[(dml, "off"), (dml, "ext")]);
+        let unsupported = node.attributes().any(|attr| {
+            attr.namespace().is_some() || !["rot", "flipH", "flipV"].contains(&attr.name())
+        }) || node
+            .children()
+            .filter(|child| child.is_element())
+            .any(|child| {
+                !child.has_tag_name((self.dml, "off")) && !child.has_tag_name((self.dml, "ext"))
+            });
+        self.other_children(node, &[(self.dml, "off"), (self.dml, "ext")]);
         let offset = self
-            .single(transform, dml, "off")?
-            .ok_or_else(|| self.invalid("picture xfrm missing off"))?;
+            .single(node, self.dml, "off")?
+            .ok_or_else(|| self.invalid("xfrm missing off"))?;
         let extent = self
-            .single(transform, dml, "ext")?
-            .ok_or_else(|| self.invalid("picture xfrm missing ext"))?;
+            .single(node, self.dml, "ext")?
+            .ok_or_else(|| self.invalid("xfrm missing ext"))?;
         self.attributes(offset, &["x", "y"]);
         self.attributes(extent, &["cx", "cy"]);
         self.leaf(offset)?;
@@ -355,20 +393,18 @@ impl Parser<'_> {
                 height: emu_to_points(self.integer(extent, "cy", 0, 27_273_042_316_900)?),
             },
         };
-        if !supported {
+        if unsupported {
+            self.warn("unsupported element transform: element omitted".into());
             return Ok(None);
         }
-        let image = self
-            .images
-            .entry(target.clone())
-            .or_insert_with(|| {
-                Arc::new(ImageResource {
-                    format,
-                    bytes: Arc::from(media.bytes()),
-                })
-            })
-            .clone();
-        Ok(Some(ImageOp { rect, image }))
+        let center = Point {
+            x: rect.origin.x + rect.size.width / 2.0,
+            y: rect.origin.y + rect.size.height / 2.0,
+        };
+        Ok(Some((
+            rect,
+            Transform::rotation_and_flips(degrees, flips[0], flips[1]).around(center),
+        )))
     }
 
     // Office writers commonly serialize an all-zero root xfrm. It does not
@@ -635,6 +671,13 @@ impl Parser<'_> {
                 (dml, "ln"),
             ],
         );
+        if properties
+            .children()
+            .any(|child| child.has_tag_name((dml, "scene3d")) || child.has_tag_name((dml, "sp3d")))
+        {
+            self.warn("3D shape transform: element omitted".into());
+            return Ok(vec![]);
+        }
         let geometry = self.single(properties, dml, "prstGeom")?;
         let preset = if let Some(geometry) = geometry {
             self.attributes(geometry, &["prst"]);
@@ -666,59 +709,8 @@ impl Parser<'_> {
             self.warn("inherited transform: shape omitted".into());
             return Ok(vec![]);
         };
-        self.attributes(transform, &["rot", "flipH", "flipV"]);
-        if transform.attribute("rot").is_some()
-            && self.integer(transform, "rot", i64::from(i32::MIN), i64::from(i32::MAX))? != 0
-        {
-            self.warn("rotation: shape omitted".into());
+        let Some((rect, transform)) = self.transform(transform)? else {
             return Ok(vec![]);
-        }
-        let mut flips = [false; 2];
-        for (index, name) in ["flipH", "flipV"].into_iter().enumerate() {
-            if let Some(value) = transform.attribute(name) {
-                match value {
-                    "0" | "false" => {}
-                    "1" | "true" => {
-                        if preset != "line" {
-                            self.warn(format!("{name}: shape omitted"));
-                            return Ok(vec![]);
-                        }
-                        flips[index] = true;
-                    }
-                    _ => return Err(self.invalid(format!("invalid boolean {name}"))),
-                }
-            }
-        }
-        self.other_children(transform, &[(dml, "off"), (dml, "ext")]);
-        let offset = self
-            .single(transform, dml, "off")?
-            .ok_or_else(|| self.invalid("xfrm missing off"))?;
-        let extent = self
-            .single(transform, dml, "ext")?
-            .ok_or_else(|| self.invalid("xfrm missing ext"))?;
-        self.attributes(offset, &["x", "y"]);
-        self.leaf(offset)?;
-        self.attributes(extent, &["cx", "cy"]);
-        self.leaf(extent)?;
-        let rect = Rect {
-            origin: Point {
-                x: emu_to_points(self.integer(
-                    offset,
-                    "x",
-                    -27_273_042_329_600,
-                    27_273_042_316_900,
-                )?),
-                y: emu_to_points(self.integer(
-                    offset,
-                    "y",
-                    -27_273_042_329_600,
-                    27_273_042_316_900,
-                )?),
-            },
-            size: Size {
-                width: emu_to_points(self.integer(extent, "cx", 0, 27_273_042_316_900)?),
-                height: emu_to_points(self.integer(extent, "cy", 0, 27_273_042_316_900)?),
-            },
         };
         let fill = if preset == "line" {
             // An open line has no interior. Still diagnose explicit unsupported paint.
@@ -749,17 +741,11 @@ impl Parser<'_> {
                 stroke,
             },
             "line" => {
-                let mut start = rect.origin;
-                let mut end = Point {
+                let start = rect.origin;
+                let end = Point {
                     x: start.x + rect.size.width,
                     y: start.y + rect.size.height,
                 };
-                if flips[0] {
-                    std::mem::swap(&mut start.x, &mut end.x);
-                }
-                if flips[1] {
-                    std::mem::swap(&mut start.y, &mut end.y);
-                }
                 Shape::Line { start, end, stroke }
             }
             _ => Shape::Rectangle { rect, fill, stroke },
@@ -778,7 +764,7 @@ impl Parser<'_> {
                 shapes.push(Shape::TextBox(text));
             }
         }
-        Ok(shapes)
+        Ok(transformed(transform, shapes))
     }
 
     fn stroke(&mut self, line: Node<'_, '_>) -> Result<Option<Stroke>, PptxError> {
@@ -823,5 +809,14 @@ impl Parser<'_> {
             }
         }
         Ok(None)
+    }
+}
+
+// Identity elements retain the exact completed-milestone representation.
+fn transformed(transform: Transform, element: Vec<Shape>) -> Vec<Shape> {
+    if transform == Transform::IDENTITY || element.is_empty() {
+        element
+    } else {
+        vec![Shape::Transformed { transform, element }]
     }
 }

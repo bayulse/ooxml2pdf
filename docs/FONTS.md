@@ -1,4 +1,4 @@
-# Fonts and text fidelity — Milestones 1G-A / 1G-B
+# Fonts and text fidelity — Milestones 1G-A / 1G-B / 1H
 
 Baseline: `v0.1.0-alpha.1` / `7fc634d`. This milestone adds configured Unicode
 text without replacing the completed package, shape, image, or legacy text paths.
@@ -139,10 +139,10 @@ Direct/default `bodyPr` square wrapping is supported on the configured path.
 Explicit `wrap="none"` receives a structured unsupported-behavior warning and
 uses wrapping there; the model has no new field that would break existing
 `TextBox` struct construction. The legacy path continues explicit breaks only.
-Unknown wrapping modes, autofit, non-top anchors, rotation/vertical text,
+Unknown wrapping modes, autofit, non-top anchors, independent bodyPr rotation/vertical text,
 bullets/numbering, spacing, decorations and other recognized unsupported
-properties retain structured parser warnings. Vertical/rotated text retains
-its documented omission behavior.
+properties retain structured parser warnings. Independent bodyPr rotation and vertical writing retain
+their documented omission behavior. Element a:xfrm rotation is supported by 1H.
 
 Unicode limitations: this is whitespace wrapping with cluster-safe emergency
 breaks, not UAX #14, CJK punctuation rules, hyphenation or language-specific word
@@ -251,3 +251,29 @@ bounds, not a strict total heap budget; shaping caches and PDF buffers add memor
 Mutation/truncation tests are smoke coverage, not a sustained fuzzing campaign.
 
 See [fixture licensing and regeneration](../fixtures/fonts/README.md).
+
+
+## Milestone 1H — Rotation and reflection fidelity
+
+Individual `a:xfrm` transforms now rotate/reflect the entire text-bearing shape,
+including fill, outline and every wrapped text run, about the shape center.
+Flips use local axes before clockwise rotation. Layout still measures the
+original inset rectangle; rotation never rewraps to the rotated axis-aligned
+bounds. The DisplayList surrounds the original text operations with one generic
+graphics scope, and the PDF backend applies a native matrix.
+
+Font bytes/resources, glyph IDs, advances, shaping source ranges, Type0 fonts,
+ToUnicode and ActualText remain unchanged. Text remains selectable/searchable,
+including rotated Japanese, accented Latin, ligatures and combining sequences
+when configured fonts cover them. The unconfigured Helvetica path keeps its
+existing Unicode coverage/replacement warnings. Images remain image XObjects.
+Mirrored text is intentionally mirrored with its containing geometry in this
+supported subset; logical Unicode mappings remain in source order. Readers may
+handle mirrored selection rectangles, rotated reading order or RTL copy/search
+differently. No claim of identical copy order across all viewers is made.
+
+`rotated-text.pptx` exercises wrapped Résumé/日本語/ffi. Independent PDF tests
+verify embedded FontFile2, ToUnicode, ActualText and text extraction. Native
+rotation/reflection affects graphics state, never font resolution or layout.
+Independent `bodyPr@rot`, vertical writing and WordArt remain unsupported with
+structured warnings; they are distinct from the supported element transform.

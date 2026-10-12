@@ -11,7 +11,7 @@ mod text;
 
 use std::{collections::BTreeMap, error::Error, fmt, sync::Arc};
 
-use o2p_core::{Color, DisplayList, DrawOp, Font, Point};
+use o2p_core::{Color, DisplayList, DrawOp, Font, Point, Transform};
 use pdf_writer::{Content, Finish, Name, Pdf, Ref, Str};
 
 /// A rendering failure. Page and operation indices are zero-based.
@@ -249,9 +249,22 @@ fn render_internal(display_list: &DisplayList, fallback: bool) -> Result<PdfRepo
 
         let mut content = Content::new();
         for op in &page.ops {
+            match op {
+                DrawOp::BeginTransform(transform) => {
+                    content.save_state();
+                    content.transform(pdf_transform(*transform, page.size.height));
+                    continue;
+                }
+                DrawOp::EndTransform => {
+                    content.restore_state();
+                    continue;
+                }
+                _ => {}
+            }
             // Every operation is isolated from the previous graphics state.
             content.save_state();
             match op {
+                DrawOp::BeginTransform(_) | DrawOp::EndTransform => unreachable!("handled above"),
                 DrawOp::GlyphText(text) => {
                     embedded::draw(&mut content, &embedded_fonts, text, page.size.height)
                 }
@@ -423,9 +436,38 @@ fn validate(display_list: &DisplayList, fallback: bool) -> Result<Vec<PdfWarning
             None,
             "page size",
         )?;
+        let mut active_transform = None;
         for (op_index, op) in page.ops.iter().enumerate() {
             let index = Some(op_index);
+            if let Some(transform) = active_transform {
+                check(
+                    transformed_geometry_is_finite(op, transform, page.size.height),
+                    index,
+                    "transformed position",
+                )?;
+            }
             match op {
+                DrawOp::BeginTransform(transform) => {
+                    check(active_transform.is_none(), index, "nested transform scope")?;
+                    let matrix = pdf_transform(*transform, page.size.height);
+                    let determinant = f64::from(transform.a) * f64::from(transform.d)
+                        - f64::from(transform.b) * f64::from(transform.c);
+                    check(
+                        matrix.into_iter().all(f32::is_finite)
+                            && determinant.is_finite()
+                            && determinant != 0.0,
+                        index,
+                        "transform matrix",
+                    )?;
+                    active_transform = Some(*transform);
+                }
+                DrawOp::EndTransform => {
+                    check(
+                        active_transform.take().is_some(),
+                        index,
+                        "unmatched transform end",
+                    )?;
+                }
                 DrawOp::Image(image) => {
                     validate_rect(image.rect, page.size.height).map_err(|field| {
                         PdfError::InvalidGeometry {
@@ -603,8 +645,79 @@ fn validate(display_list: &DisplayList, fallback: bool) -> Result<Vec<PdfWarning
                 }
             }
         }
+        check(
+            active_transform.is_none(),
+            Some(page.ops.len()),
+            "unclosed transform scope",
+        )?;
     }
     Ok(warnings)
+}
+
+// Existing primitives already use bottom-left PDF coordinates. Conjugate the
+// generic matrix by P(x,y)=(x,H-y): P * M * P, without changing text/image code.
+fn pdf_transform(t: Transform, page_height: f32) -> [f32; 6] {
+    let h = f64::from(page_height);
+    [
+        t.a,
+        -t.b,
+        -t.c,
+        t.d,
+        (f64::from(t.c) * h + f64::from(t.e)) as f32,
+        (h * (1.0 - f64::from(t.d)) - f64::from(t.f)) as f32,
+    ]
+}
+
+fn transformed_geometry_is_finite(op: &DrawOp, transform: Transform, height: f32) -> bool {
+    let point = |p: Point| {
+        let p = transform.apply(p);
+        finite_point(p) && (height - p.y).is_finite()
+    };
+    let rect = |r: o2p_core::Rect| {
+        [
+            r.origin,
+            Point {
+                x: r.origin.x + r.size.width,
+                y: r.origin.y,
+            },
+            Point {
+                x: r.origin.x,
+                y: r.origin.y + r.size.height,
+            },
+            Point {
+                x: r.origin.x + r.size.width,
+                y: r.origin.y + r.size.height,
+            },
+        ]
+        .into_iter()
+        .all(point)
+    };
+    match op {
+        DrawOp::BeginTransform(_) | DrawOp::EndTransform => true,
+        DrawOp::Rect(r) => rect(r.rect),
+        DrawOp::StrokeRect(r) => rect(r.rect),
+        DrawOp::Ellipse(r) => rect(r.bounds),
+        DrawOp::StrokeEllipse(r) => rect(r.bounds),
+        DrawOp::Image(r) => rect(r.rect),
+        DrawOp::Line(l) => point(l.start) && point(l.end),
+        DrawOp::Text(t) => point(t.origin),
+        DrawOp::GlyphText(t) => {
+            point(t.origin)
+                && t.text.runs.iter().all(|run| {
+                    let mut x = f64::from(t.origin.x) + f64::from(run.origin.x);
+                    let mut y = f64::from(t.origin.y) + f64::from(run.origin.y);
+                    run.glyphs.iter().all(|glyph| {
+                        let valid = point(Point {
+                            x: (x + f64::from(glyph.offset.x)) as f32,
+                            y: (y + f64::from(glyph.offset.y)) as f32,
+                        });
+                        x += f64::from(glyph.advance.x);
+                        y += f64::from(glyph.advance.y);
+                        valid
+                    })
+                })
+        }
+    }
 }
 
 fn validate_ellipse(bounds: o2p_core::Rect, page_height: f32) -> Result<(), &'static str> {

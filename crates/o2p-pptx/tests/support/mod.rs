@@ -630,3 +630,125 @@ pub fn wrapping_fixtures() -> Vec<(&'static str, Parts)> {
         ),
     ]
 }
+
+/// Individual-element transforms; asymmetric text and the 2x2 color image
+/// expose reflection axes and composition order without Office-generated data.
+pub fn transform_fixtures() -> Vec<(&'static str, Parts)> {
+    let paragraph = |label: &str| {
+        format!(
+            "<a:p><a:r><a:rPr sz='1800'><a:latin typeface='O2P Test Sans'/></a:rPr><a:t>{label}</a:t></a:r></a:p>"
+        )
+    };
+    let bounds = (2_540_000, 1_905_000, 2_032_000, 1_016_000);
+    let painted = |id, coords, label: &str| {
+        text_shape(
+            id,
+            coords,
+            &paragraph(label),
+            &solid("DDEEFF"),
+            &outline("205080", 25_400),
+        )
+        .replace("wrap='none'", "wrap='square'")
+    };
+    let transform = |element: String, attrs: &str| {
+        element.replacen("<a:xfrm>", &format!("<a:xfrm {attrs}>"), 1)
+    };
+    let rect = rectangle(2, bounds, &solid("F0B020"), &outline("804020", 25_400));
+    let ellipse = ellipse(2, bounds, &solid("40B080"), &outline("205040", 25_400));
+    let image = picture(2, bounds);
+    let h = transform(painted(2, bounds, "ABC flip H"), "flipH='1'");
+    let v = transform(painted(2, bounds, "ABC flip V"), "flipV='true'");
+    let hv_rot = transform(
+        painted(2, bounds, "ABC both + 45"),
+        "rot='2700000' flipH='true' flipV='1'",
+    );
+    let mixed = format!(
+        "{}{}{}{}{}{}{}{}{}",
+        transform(
+            rectangle(
+                2,
+                (762000, 762000, 1524000, 762000),
+                &solid("F0B020"),
+                &outline("804020", 25400)
+            ),
+            "rot='2700000'"
+        ),
+        transform(
+            painted(3, (3302000, 762000, 1778000, 762000), "Rectangle 90"),
+            "rot='5400000'"
+        ),
+        transform(
+            self::ellipse(
+                4,
+                (5842000, 762000, 2032000, 762000),
+                &solid("40B080"),
+                &outline("205040", 25400)
+            ),
+            "rot='2700000'"
+        ),
+        transform(
+            picture(5, (762000, 2540000, 1524000, 1016000)),
+            "rot='5400000'"
+        ),
+        transform(
+            painted(6, (3048000, 2540000, 2286000, 1016000), "Rotated real text"),
+            "rot='-900000'"
+        ),
+        transform(
+            painted(7, (5842000, 2540000, 2032000, 1016000), "ABC horizontal"),
+            "flipH='1'"
+        ),
+        transform(
+            painted(8, (762000, 4699000, 2032000, 1016000), "ABC vertical"),
+            "flipV='1'"
+        ),
+        transform(
+            picture(9, (3556000, 4699000, 1524000, 1016000)),
+            "flipH='1' rot='2700000'"
+        ),
+        transform(
+            straight_line(
+                10,
+                (5842000, 4826000, 1778000, 762000),
+                &outline("C02040", 38100)
+            ),
+            "rot='2700000' flipV='1'"
+        )
+    );
+    vec![
+        (
+            "rotated-rectangle-45.pptx",
+            content_deck("", &transform(rect.clone(), "rot='2700000'")),
+        ),
+        (
+            "rotated-rectangle-90.pptx",
+            content_deck("", &transform(rect, "rot='5400000'")),
+        ),
+        (
+            "rotated-ellipse.pptx",
+            content_deck("", &transform(ellipse, "rot='2700000'")),
+        ),
+        (
+            "rotated-image.pptx",
+            image_deck(false, &transform(image, "rot='5400000'")),
+        ),
+        (
+            "rotated-text.pptx",
+            content_deck(
+                "",
+                &transform(
+                    painted(
+                        2,
+                        (bounds.0, bounds.1, bounds.2, 1_625_600),
+                        "Résumé 日本語 ffi wraps with real selectable text.",
+                    ),
+                    "rot='2700000'",
+                ),
+            ),
+        ),
+        ("flipped-horizontal.pptx", content_deck("", &h)),
+        ("flipped-vertical.pptx", content_deck("", &v)),
+        ("flipped-and-rotated.pptx", content_deck("", &hv_rot)),
+        ("mixed-transforms.pptx", image_deck(false, &mixed)),
+    ]
+}

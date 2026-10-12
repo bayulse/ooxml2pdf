@@ -44,6 +44,84 @@ fn convert(input: &Path, output: &Path) -> std::process::Output {
 }
 
 #[test]
+fn mixed_transforms_cli_keeps_native_images_vectors_and_searchable_rotated_text() {
+    let directory = TestDirectory::new();
+    let destination = directory.0.join("mixed-transforms.pdf");
+    for configured in [false, true] {
+        let run = || {
+            let mut command = Command::new(env!("CARGO_BIN_EXE_o2p"));
+            command
+                .arg("convert")
+                .arg(fixture("mixed-transforms.pptx"))
+                .arg("-o")
+                .arg(&destination);
+            if configured {
+                command
+                    .arg("--font-dir")
+                    .arg(Path::new(env!("CARGO_MANIFEST_DIR")).join("../../fixtures/fonts"));
+            }
+            command.output().unwrap()
+        };
+        let output = run();
+        assert!(
+            output.status.success(),
+            "{}",
+            String::from_utf8_lossy(&output.stderr)
+        );
+        let warnings = String::from_utf8_lossy(&output.stderr);
+        assert!(!warnings.contains("element omitted") && !warnings.contains("picture omitted"));
+        let bytes = fs::read(&destination).unwrap();
+        let pdf = lopdf::Document::load_mem(&bytes).unwrap();
+        let content =
+            lopdf::content::Content::decode(&pdf.get_page_content(pdf.get_pages()[&1]).unwrap())
+                .unwrap();
+        assert_eq!(
+            content
+                .operations
+                .iter()
+                .filter(|o| o.operator == "cm")
+                .count(),
+            11
+        ); // 9 element scopes + 2 image placements.
+        assert_eq!(
+            content
+                .operations
+                .iter()
+                .filter(|o| o.operator == "Do")
+                .count(),
+            2
+        );
+        let text: String = pdf
+            .extract_text(&[1])
+            .unwrap()
+            .chars()
+            .filter(|c| !c.is_whitespace())
+            .collect();
+        for label in [
+            "Rectangle90",
+            "Rotatedrealtext",
+            "ABChorizontal",
+            "ABCvertical",
+        ] {
+            assert!(text.contains(label), "{label}: {text}");
+        }
+        if configured {
+            assert!(
+                pdf.objects
+                    .values()
+                    .any(|o| o.as_dict().is_ok_and(|d| d.has(b"ToUnicode")))
+            );
+            assert!(
+                String::from_utf8_lossy(&pdf.get_page_content(pdf.get_pages()[&1]).unwrap())
+                    .contains("/ActualText")
+            );
+        }
+        assert!(run().status.success());
+        assert_eq!(bytes, fs::read(&destination).unwrap());
+    }
+}
+
+#[test]
 fn wrapped_cli_fixture_preserves_fonts_styles_positions_and_searchable_text() {
     let directory = TestDirectory::new();
     let destination = directory.0.join("mixed-runs-wrapped.pdf");

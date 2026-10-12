@@ -6,7 +6,9 @@
 
 mod glyph;
 mod text;
+mod transform;
 pub use glyph::{FontResource, Glyph, GlyphRun, GlyphTextOp, ShapedText};
+pub use transform::Transform;
 
 /// A position in points. Negative coordinates are allowed.
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -148,6 +150,11 @@ pub struct ImageOp {
 /// An explicit drawing command. No Office or PDF semantics appear here.
 #[derive(Debug, Clone, PartialEq)]
 pub enum DrawOp {
+    /// Start an individual element's graphics transform. Scopes must be balanced
+    /// within a page and cannot nest in the current rendering contract.
+    BeginTransform(Transform),
+    /// End the current element's transform without changing paint order.
+    EndTransform,
     GlyphText(GlyphTextOp),
     Image(ImageOp),
     Text(TextOp),

@@ -1,7 +1,7 @@
 //! Owned, normalized slide content and its format-independent drawing adapter.
 use o2p_core::{
     Color, DrawOp, EllipseOp, ImageOp, LineOp, Page, Point, Rect, RectOp, Size, StrokeEllipseOp,
-    StrokeRectOp,
+    StrokeRectOp, Transform,
 };
 
 /// Explicit paint; absent/unresolved paint is represented by `None` on a shape.
@@ -21,6 +21,12 @@ pub struct Stroke {
 /// Supported explicit geometry in points, without XML or PDF types.
 #[derive(Debug, Clone, PartialEq)]
 pub enum Shape {
+    /// One transformed element: its geometry and optional text share a scope.
+    /// This does not represent a DrawingML group or inherited coordinate space.
+    Transformed {
+        transform: Transform,
+        element: Vec<Shape>,
+    },
     /// Text paints immediately after its associated vector geometry.
     TextBox(TextBox),
     /// An embedded raster picture, in the same paint sequence as vector shapes.
@@ -84,65 +90,80 @@ impl Slide {
                 color,
             }));
         }
-        for shape in &self.shapes {
-            let (rect, fill, stroke) = match shape {
-                Shape::TextBox(text) => {
-                    ops.extend(layout(text)?);
-                    continue;
-                }
-                Shape::Image(image) => {
-                    ops.push(DrawOp::Image(image.clone()));
-                    continue;
-                }
-                Shape::Rectangle { rect, fill, stroke } => (rect, fill, stroke),
-                Shape::Ellipse {
-                    bounds,
-                    fill,
-                    stroke,
-                } => {
-                    if let Some(Fill::Solid(color)) = fill {
-                        ops.push(DrawOp::Ellipse(EllipseOp {
-                            bounds: *bounds,
-                            color: *color,
-                        }));
-                    }
-                    if let Some(stroke) = stroke {
-                        ops.push(DrawOp::StrokeEllipse(StrokeEllipseOp {
-                            bounds: *bounds,
-                            color: stroke.color,
-                            width: stroke.width,
-                        }));
-                    }
-                    continue;
-                }
-                Shape::Line { start, end, stroke } => {
-                    if let Some(stroke) = stroke {
-                        ops.push(DrawOp::Line(LineOp {
-                            start: *start,
-                            end: *end,
-                            color: stroke.color,
-                            width: stroke.width,
-                        }));
-                    }
-                    continue;
-                }
-            };
-            if let Some(Fill::Solid(color)) = fill {
-                ops.push(DrawOp::Rect(RectOp {
-                    rect: *rect,
-                    color: *color,
-                }));
-            }
-            if let Some(stroke) = stroke {
-                ops.push(DrawOp::StrokeRect(StrokeRectOp {
-                    rect: *rect,
-                    color: stroke.color,
-                    width: stroke.width,
-                }));
-            }
-        }
+        append_shapes(&self.shapes, &mut ops, &mut layout)?;
         Ok(Page { size, ops })
     }
+}
+
+fn append_shapes<E>(
+    shapes: &[Shape],
+    ops: &mut Vec<DrawOp>,
+    layout: &mut impl FnMut(&TextBox) -> Result<Vec<DrawOp>, E>,
+) -> Result<(), E> {
+    for shape in shapes {
+        let (rect, fill, stroke) = match shape {
+            Shape::Transformed { transform, element } => {
+                ops.push(DrawOp::BeginTransform(*transform));
+                append_shapes(element, ops, layout)?;
+                ops.push(DrawOp::EndTransform);
+                continue;
+            }
+            Shape::TextBox(text) => {
+                ops.extend(layout(text)?);
+                continue;
+            }
+            Shape::Image(image) => {
+                ops.push(DrawOp::Image(image.clone()));
+                continue;
+            }
+            Shape::Rectangle { rect, fill, stroke } => (rect, fill, stroke),
+            Shape::Ellipse {
+                bounds,
+                fill,
+                stroke,
+            } => {
+                if let Some(Fill::Solid(color)) = fill {
+                    ops.push(DrawOp::Ellipse(EllipseOp {
+                        bounds: *bounds,
+                        color: *color,
+                    }));
+                }
+                if let Some(stroke) = stroke {
+                    ops.push(DrawOp::StrokeEllipse(StrokeEllipseOp {
+                        bounds: *bounds,
+                        color: stroke.color,
+                        width: stroke.width,
+                    }));
+                }
+                continue;
+            }
+            Shape::Line { start, end, stroke } => {
+                if let Some(stroke) = stroke {
+                    ops.push(DrawOp::Line(LineOp {
+                        start: *start,
+                        end: *end,
+                        color: stroke.color,
+                        width: stroke.width,
+                    }));
+                }
+                continue;
+            }
+        };
+        if let Some(Fill::Solid(color)) = fill {
+            ops.push(DrawOp::Rect(RectOp {
+                rect: *rect,
+                color: *color,
+            }));
+        }
+        if let Some(stroke) = stroke {
+            ops.push(DrawOp::StrokeRect(StrokeRectOp {
+                rect: *rect,
+                color: stroke.color,
+                width: stroke.width,
+            }));
+        }
+    }
+    Ok(())
 }
 
 /// Resolved basic run properties; all sizes use points.

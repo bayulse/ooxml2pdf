@@ -46,10 +46,11 @@ cargo run -p o2p-cli -- convert fixtures/pptx/three-slides-16x9.pptx -o target/t
 
 Each referenced slide produces one page in presentation order; this example
 creates three 960 × 540 point pages. Slide filenames do not determine order.
-Explicit sRGB solid backgrounds, axis-aligned rectangles and ellipses support
+Explicit sRGB solid backgrounds, rectangles and ellipses support
 solid/no fill and simple solid outlines. Straight lines support position, size,
 flipped endpoints, color and width. Embedded PNG/JPEG pictures fill their explicit
-transform rectangles; crop/tile, picture flips/rotation and effects are warned
+transform rectangles; individual elements support center-based clockwise rotation and horizontal/vertical
+flips through native PDF graphics transforms. Crop/tile and effects are warned
 about and omitted. Basic text boxes support direct size, bold, italic, sRGB color, explicit breaks
 and left/center/right alignment. Unresolved text properties use documented
 fallbacks and warnings. Themes, inherited styles and other advanced features

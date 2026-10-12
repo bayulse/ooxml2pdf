@@ -178,22 +178,26 @@ fn line_flips_handle_both_boolean_spellings_and_signed_positions() {
     ] {
         let model = parse(&base.replace("<a:xfrm>", &format!("<a:xfrm{attributes}>"))).unwrap();
         assert!(model.warnings().is_empty());
+        let (shape, transform) = match &model.slide_contents()[0].shapes()[0] {
+            Shape::Transformed { transform, element } => (&element[0], *transform),
+            shape => (shape, o2p_core::Transform::IDENTITY),
+        };
         let Shape::Line {
             start: a,
             end: b,
             stroke,
-        } = model.slide_contents()[0].shapes()[0]
+        } = shape
         else {
             panic!("line")
         };
         assert_eq!(
-            a,
+            transform.apply(*a),
             Point {
                 x: start.0,
                 y: start.1
             }
         );
-        assert_eq!(b, Point { x: end.0, y: end.1 });
+        assert_eq!(transform.apply(*b), Point { x: end.0, y: end.1 });
         assert_eq!(stroke.unwrap().width, emu_to_points(19050));
     }
 }
@@ -281,10 +285,7 @@ fn unsupported_ellipse_and_line_styles_produce_slide_scoped_warnings() {
             ),
             "alpha",
         ),
-        (
-            base.replace("<a:xfrm>", "<a:xfrm rot='5400000'>"),
-            "rotation",
-        ),
+        (base.replace("<a:xfrm>", "<a:xfrm skew='5400000'>"), "skew"),
         (
             base.replace(
                 "<a:avLst/>",
@@ -326,10 +327,7 @@ fn unsupported_ellipse_and_line_styles_produce_slide_scoped_warnings() {
             base.replace("prst='line'", "prst='bentConnector3'"),
             "unsupported preset",
         ),
-        (
-            base.replace("<a:xfrm>", "<a:xfrm rot='5400000'>"),
-            "rotation",
-        ),
+        (base.replace("<a:xfrm>", "<a:xfrm skew='5400000'>"), "skew"),
         (
             base.replace(
                 "<p:cNvCxnSpPr/>",
