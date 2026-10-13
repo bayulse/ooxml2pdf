@@ -282,3 +282,11 @@ Regenerate with the existing o2p-pptx `generate_fixtures` example. They do not
 contain PowerPoint exports or reference images. Tests independently inspect
 effective models, map scope, PDF text/mappings, malformed warnings, and stable
 fixture/PDF bytes. See [INHERITANCE.md](../../docs/INHERITANCE.md).
+
+## Fidelity 2B
+
+Eleven generated fixtures cover rounded rectangles (default/custom radius, text,
+rotation/flipping), rectangle/rounded rectangle/ellipse/image outer shadows,
+theme effect references, local shadow precedence and overlapping shadow order.
+Names and package construction live in `tests/support/fidelity2b.rs`; regeneration
+uses the existing `o2p-pptx` example. See `docs/EFFECTS.md` for semantics and limits.

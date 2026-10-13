@@ -1250,3 +1250,17 @@ Public-corpus metrics remain unchanged: all six cases are MAJOR_DIFFERENCE.
 Warnings decrease from 93 to 20; this is not evidence of an image fidelity gain.
 Full before/after measurements are in
 [compat/reports/FIDELITY_2A.md](../compat/reports/FIDELITY_2A.md).
+
+# Fidelity 2B: Rounded geometry and basic outer effects
+
+The common DisplayList now has rounded rectangle fill/outline operations and a
+generic silhouette-shadow operation. PPTX preset/adjustment and theme effect
+semantics remain inside `o2p-pptx`; `o2p-pdf` renders vector corners and bounded
+local alpha-mask shadows. Effects preserve element transform scopes, text and
+paint order. No third-party dependencies changed. See [EFFECTS.md](EFFECTS.md)
+for radius semantics, effect precedence, approximate blur and security limits.
+
+Compatibility review found that the generated public inputs and local PowerPoint
+reference inputs are different presentations. The required public batch is
+unchanged; a separate correctly paired reference-input batch improves all twelve
+slides. [FIDELITY_2B.md](../compat/reports/FIDELITY_2B.md) records both sets.

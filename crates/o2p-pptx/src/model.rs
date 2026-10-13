@@ -31,6 +31,16 @@ pub enum Shape {
     TextBox(TextBox),
     /// An embedded raster picture, in the same paint sequence as vector shapes.
     Image(ImageOp),
+    Shadowed {
+        shadow: o2p_core::Shadow,
+        element: Box<Shape>,
+    },
+    RoundedRectangle {
+        rect: Rect,
+        radius: f32,
+        fill: Option<Fill>,
+        stroke: Option<Stroke>,
+    },
     Rectangle {
         rect: Rect,
         fill: Option<Fill>,
@@ -111,6 +121,77 @@ fn append_shapes<E>(
                 ops.push(DrawOp::BeginTransform(*transform));
                 append_shapes(element, ops, layout)?;
                 ops.push(DrawOp::EndTransform);
+                continue;
+            }
+            Shape::Shadowed { shadow, element } => {
+                let (geometry, fill, stroke_width) = match element.as_ref() {
+                    Shape::Rectangle { rect, fill, stroke } => (
+                        o2p_core::ShadowGeometry::Rectangle(*rect),
+                        matches!(fill, Some(Fill::Solid(_))),
+                        stroke.map_or(0.0, |s| s.width),
+                    ),
+                    Shape::RoundedRectangle {
+                        rect,
+                        radius,
+                        fill,
+                        stroke,
+                    } => (
+                        o2p_core::ShadowGeometry::RoundedRectangle {
+                            rect: *rect,
+                            radius: *radius,
+                        },
+                        matches!(fill, Some(Fill::Solid(_))),
+                        stroke.map_or(0.0, |s| s.width),
+                    ),
+                    Shape::Ellipse {
+                        bounds,
+                        fill,
+                        stroke,
+                    } => (
+                        o2p_core::ShadowGeometry::Ellipse(*bounds),
+                        matches!(fill, Some(Fill::Solid(_))),
+                        stroke.map_or(0.0, |s| s.width),
+                    ),
+                    Shape::Image(image) => {
+                        (o2p_core::ShadowGeometry::Image(image.clone()), true, 0.0)
+                    }
+                    _ => {
+                        append_shapes(std::slice::from_ref(element), ops, layout)?;
+                        continue;
+                    }
+                };
+                if fill || stroke_width > 0.0 {
+                    ops.push(DrawOp::Shadow(o2p_core::ShadowOp {
+                        geometry,
+                        fill,
+                        stroke_width,
+                        shadow: *shadow,
+                    }));
+                }
+                append_shapes(std::slice::from_ref(element), ops, layout)?;
+                continue;
+            }
+            Shape::RoundedRectangle {
+                rect,
+                radius,
+                fill,
+                stroke,
+            } => {
+                if let Some(Fill::Solid(color)) = fill {
+                    ops.push(DrawOp::RoundedRect(o2p_core::RoundedRectOp {
+                        rect: *rect,
+                        radius: *radius,
+                        color: *color,
+                    }));
+                }
+                if let Some(stroke) = stroke {
+                    ops.push(DrawOp::StrokeRoundedRect(o2p_core::StrokeRoundedRectOp {
+                        rect: *rect,
+                        radius: *radius,
+                        color: stroke.color,
+                        width: stroke.width,
+                    }));
+                }
                 continue;
             }
             Shape::TextBox(text) => {

@@ -73,6 +73,7 @@ pub struct Theme {
 pub(crate) struct ColorValue {
     pub base: ColorBase,
     pub transforms: Vec<(ColorTransformKind, i32)>,
+    pub opacity: u32,
 }
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) enum ColorBase {

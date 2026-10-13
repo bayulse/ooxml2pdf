@@ -302,7 +302,26 @@ pub(crate) fn color_value(
     allow_scheme: bool,
     context: &mut Context<'_>,
 ) -> Result<ColorValue, PptxError> {
+    color_value_options(node, ns, allow_scheme, false, context)
+}
+
+pub(crate) fn effect_color_value(
+    node: Node<'_, '_>,
+    ns: &str,
+    context: &mut Context<'_>,
+) -> Result<ColorValue, PptxError> {
+    color_value_options(node, ns, true, true, context)
+}
+fn color_value_options(
+    node: Node<'_, '_>,
+    ns: &str,
+    allow_scheme: bool,
+    allow_alpha: bool,
+    context: &mut Context<'_>,
+) -> Result<ColorValue, PptxError> {
     context.element_only(node)?;
+    let mut opacity = 100_000;
+    let mut alpha_seen = false;
     let mut base = if node.has_tag_name((ns, "srgbClr")) {
         context.attributes(node, &["val"]);
         ColorBase::Rgb(context.hex(context.string(node, "val")?)?)
@@ -329,6 +348,22 @@ pub(crate) fn color_value(
     let mut transforms = Vec::new();
     for transform in node.children().filter(|n| n.is_element()) {
         let name = transform.tag_name().name();
+        if allow_alpha && transform.has_tag_name((ns, "alpha")) {
+            if alpha_seen {
+                return Err(context.invalid("duplicate shadow alpha"));
+            }
+            alpha_seen = true;
+            context.attributes(transform, &["val"]);
+            context.leaf(transform)?;
+            opacity = context
+                .string(transform, "val")?
+                .parse::<u32>()
+                .map_err(|_| context.invalid("invalid shadow alpha"))?;
+            if opacity > 100_000 {
+                return Err(context.invalid("out-of-range shadow alpha"));
+            }
+            continue;
+        }
         if transform.tag_name().namespace() != Some(ns)
             || !matches!(name, "tint" | "shade" | "lumMod" | "lumOff")
         {
@@ -365,7 +400,11 @@ pub(crate) fn color_value(
             value,
         ));
     }
-    Ok(ColorValue { base, transforms })
+    Ok(ColorValue {
+        base,
+        transforms,
+        opacity,
+    })
 }
 
 pub(crate) fn font(

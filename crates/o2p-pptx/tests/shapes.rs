@@ -311,9 +311,9 @@ fn unsupported_ellipse_and_line_styles_produce_slide_scoped_warnings() {
         (
             base.replace(
                 "</p:spPr>",
-                "<a:effectLst><a:outerShdw/></a:effectLst></p:spPr>",
+                "<a:effectLst><a:innerShdw/></a:effectLst></p:spPr>",
             ),
-            "effectLst",
+            "innerShdw",
         ),
     ] {
         let model = parse(&shape).unwrap();

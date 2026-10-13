@@ -85,6 +85,8 @@ impl PlaceholderTextDefaults {
 pub(crate) struct Properties {
     pub geometry: PlaceholderGeometry,
     pub geometry_blocked: bool,
+    pub radius_adjustment: Option<f32>,
+    pub effect: Option<Option<crate::effects::ResolvedShadow>>,
     pub preset: Option<String>,
     pub fill: Option<Option<Fill>>,
     pub line_width: Option<f32>,
@@ -101,6 +103,10 @@ impl Properties {
         } else {
             self.geometry.inherit(&parent.geometry);
         }
+        if self.preset.is_none() {
+            self.radius_adjustment = self.radius_adjustment.or(parent.radius_adjustment);
+        }
+        self.effect = self.effect.or(parent.effect);
         self.preset = self.preset.clone().or_else(|| parent.preset.clone());
         self.fill = self.fill.or(parent.fill);
         self.line_width = self.line_width.or(parent.line_width);
@@ -113,6 +119,7 @@ impl Properties {
     pub(crate) fn effective(&self) -> Self {
         let mut effective = self.clone();
         effective.fill = effective.fill.or(self.references.fill);
+        effective.effect = effective.effect.or(self.references.effect);
         effective.line_width = effective.line_width.or(self.references.line_width);
         effective.line_color = effective.line_color.or(self.references.line_color);
         for level in &mut effective.text_levels.levels {

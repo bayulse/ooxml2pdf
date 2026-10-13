@@ -218,6 +218,64 @@ struct Parser<'a> {
 }
 
 impl Parser<'_> {
+    fn rounded_radius(&mut self, geometry: Node<'_, '_>, rect: Rect) -> Result<f32, PptxError> {
+        let mut adjustment = 16667_i32;
+        if let Some(list) = self.single(geometry, self.dml, "avLst")? {
+            self.attributes(list, &[]);
+            self.element_only(list)?;
+            let mut seen = false;
+            for guide in list.children().filter(|n| n.is_element()) {
+                self.attributes(guide, &["name", "fmla"]);
+                self.leaf(guide)?;
+                if guide.has_tag_name((self.dml, "gd")) && guide.attribute("name") == Some("adj") {
+                    if seen {
+                        return Err(self.invalid("duplicate rounded rectangle adjustment"));
+                    }
+                    seen = true;
+                    let parts: Vec<_> = guide
+                        .attribute("fmla")
+                        .unwrap_or("")
+                        .split_whitespace()
+                        .collect();
+                    if parts.len() == 2 && parts[0] == "val" {
+                        adjustment = parts[1]
+                            .parse()
+                            .map_err(|_| self.invalid("invalid rounded rectangle adjustment"))?;
+                    } else {
+                        self.warn(
+                            "roundRect custom adjustment formula unsupported; preset default used"
+                                .into(),
+                        );
+                    }
+                } else {
+                    self.warn(
+                        "roundRect custom adjustment unsupported; preset default retained".into(),
+                    );
+                }
+            }
+        }
+        Ok(rect.size.width.min(rect.size.height) * adjustment.clamp(0, 50000) as f32 / 100000.0)
+    }
+    fn resolved_shadow(
+        &mut self,
+        properties: Node<'_, '_>,
+        references: Option<&crate::styles::StyleDefaults>,
+        transform: Transform,
+    ) -> Result<Option<o2p_core::Shadow>, PptxError> {
+        let mut context = crate::theme_xml::Context {
+            color_map: Some(&self.color_map),
+            part: self.reference.part_name(),
+            slide_id: Some(self.reference.id()),
+            warnings: self.warnings,
+        };
+        let local = crate::effects::list(properties, self.dml, &mut context)?;
+        let resolved = match local {
+            Some(effect) => effect.and_then(|s| s.resolve(self.theme, None, &mut context)),
+            None => references.and_then(|r| r.effect.flatten()),
+        };
+        Ok(resolved.map(|s| s.local(transform)))
+    }
+
     fn style_defaults(
         &mut self,
         node: Node<'_, '_>,
@@ -254,7 +312,16 @@ impl Parser<'_> {
         let dml = self.dml;
         let rel = if pml == PML { REL } else { STRICT_REL };
         self.attributes(node, &[]);
-        self.other_children(node, &[(pml, "nvPicPr"), (pml, "blipFill"), (pml, "spPr")]);
+        self.other_children(
+            node,
+            &[
+                (pml, "nvPicPr"),
+                (pml, "blipFill"),
+                (pml, "spPr"),
+                (pml, "style"),
+                (dml, "style"),
+            ],
+        );
         if let Some(nonvisual) = self.single(node, pml, "nvPicPr")? {
             self.attributes(nonvisual, &[]);
             self.other_children(
@@ -389,7 +456,7 @@ impl Parser<'_> {
             supported = false;
         }
         for child in properties.children().filter(|child| child.is_element()) {
-            if child.has_tag_name((dml, "xfrm")) {
+            if child.has_tag_name((dml, "xfrm")) || child.has_tag_name((dml, "effectLst")) {
                 continue;
             }
             if child.has_tag_name((dml, "prstGeom")) && child.attribute("prst") == Some("rect") {
@@ -443,6 +510,16 @@ impl Parser<'_> {
             })
             .clone();
         let image = Shape::Image(ImageOp { rect, image });
+        let references = self.style_defaults(node)?;
+        let shadow = self.resolved_shadow(properties, references.as_ref(), transform)?;
+        let image = if let Some(shadow) = shadow {
+            Shape::Shadowed {
+                shadow,
+                element: Box::new(image),
+            }
+        } else {
+            image
+        };
         Ok(Some(if transform == Transform::IDENTITY {
             image
         } else {
@@ -780,6 +857,7 @@ impl Parser<'_> {
                 (dml, "pattFill"),
                 (dml, "grpFill"),
                 (dml, "ln"),
+                (dml, "effectLst"),
             ],
         );
         if properties
@@ -794,11 +872,16 @@ impl Parser<'_> {
             self.attributes(geometry, &["prst"]);
             self.element_only(geometry)?;
             let preset = geometry.attribute("prst").unwrap_or("");
-            if !matches!(preset, "rect" | "ellipse" | "line") || (connector && preset != "line") {
+            if !matches!(preset, "rect" | "roundRect" | "ellipse" | "line")
+                || (connector && preset != "line")
+            {
                 self.warn("unsupported preset geometry: shape omitted".into());
                 return Ok(vec![]);
             }
             for child in geometry.children().filter(|child| child.is_element()) {
+                if preset == "roundRect" && child.has_tag_name((dml, "avLst")) {
+                    continue;
+                }
                 if !child.has_tag_name((dml, "avLst"))
                     || child.children().any(|entry| entry.is_element())
                 {
@@ -862,6 +945,15 @@ impl Parser<'_> {
             None
         };
         let shape = match preset {
+            "roundRect" => Shape::RoundedRectangle {
+                rect,
+                radius: self.rounded_radius(
+                    geometry.ok_or_else(|| self.invalid("missing rounded geometry"))?,
+                    rect,
+                )?,
+                fill,
+                stroke,
+            },
             "ellipse" => Shape::Ellipse {
                 bounds: rect,
                 fill,
@@ -878,10 +970,29 @@ impl Parser<'_> {
             _ => Shape::Rectangle { rect, fill, stroke },
         };
         let mut shapes = vec![];
+        let mut shadow = self.resolved_shadow(properties, references.as_ref(), transform)?;
+        if shadow.is_some() && preset == "line" {
+            self.warn("outer shadow on line geometry unsupported; effect omitted".into());
+            shadow = None;
+        } else if shadow.is_some()
+            && !matches!(fill, Some(Fill::Solid(_)))
+            && stroke.is_none()
+            && text_body.is_some()
+        {
+            self.warn("text shadow unsupported; shape has no painted silhouette".into());
+            shadow = None;
+        }
         if preset != "text"
             || (references.is_some() && (matches!(fill, Some(Fill::Solid(_))) || stroke.is_some()))
         {
-            shapes.push(shape);
+            shapes.push(if let Some(shadow) = shadow {
+                Shape::Shadowed {
+                    shadow,
+                    element: Box::new(shape),
+                }
+            } else {
+                shape
+            });
         }
         if let Some(body) = text_body {
             if connector {

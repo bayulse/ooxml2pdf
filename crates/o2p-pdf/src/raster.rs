@@ -10,7 +10,7 @@ const MAX_PIXELS: u64 = 16_777_216;
 const MAX_DIMENSION: u32 = 16_384;
 const MAX_DECODE_BYTES: u64 = 128 * 1024 * 1024;
 
-pub(super) fn write(pdf: &mut Pdf, reference: Ref, resource: &ImageResource) -> Result<(), String> {
+pub(super) fn decode(resource: &ImageResource) -> Result<DynamicImage, String> {
     if ImageFormat::detect(&resource.bytes) != Some(resource.format) {
         return Err("image format does not match signature".into());
     }
@@ -48,7 +48,11 @@ pub(super) fn write(pdf: &mut Pdf, reference: Ref, resource: &ImageResource) -> 
     if decoder.total_bytes() > MAX_DECODE_BYTES {
         return Err("image exceeds max_decode_bytes".into());
     }
-    let decoded = DynamicImage::from_decoder(decoder).map_err(|error| error.to_string())?;
+    DynamicImage::from_decoder(decoder).map_err(|error| error.to_string())
+}
+pub(super) fn write(pdf: &mut Pdf, reference: Ref, resource: &ImageResource) -> Result<(), String> {
+    let decoded = decode(resource)?;
+    let (width, height) = (decoded.width(), decoded.height());
     let (rgb, alpha) = if decoded.color().has_alpha() {
         let rgba = decoded.into_rgba8();
         let mut rgb = Vec::with_capacity(width as usize * height as usize * 3);

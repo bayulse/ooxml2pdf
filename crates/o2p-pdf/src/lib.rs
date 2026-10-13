@@ -7,6 +7,7 @@
 
 mod embedded;
 mod raster;
+mod shadow;
 mod text;
 
 use std::{collections::BTreeMap, error::Error, fmt, sync::Arc};
@@ -145,6 +146,13 @@ pub fn render_with_report(display_list: &DisplayList) -> Result<PdfReport, PdfEr
 
 fn render_internal(display_list: &DisplayList, fallback: bool) -> Result<PdfReport, PdfError> {
     let warnings = validate(display_list, fallback)?;
+    if display_list
+        .pages
+        .iter()
+        .any(|p| p.ops.iter().any(|op| matches!(op, DrawOp::Shadow(_))))
+    {
+        return render_internal(&shadow::expand(display_list)?, fallback);
+    }
 
     let catalog = Ref::new(1);
     let pages = Ref::new(2);
@@ -300,6 +308,25 @@ fn render_internal(display_list: &DisplayList, fallback: bool) -> Result<PdfRepo
                         .collect();
                     content.show(Str(&encoded));
                     content.end_text();
+                }
+                DrawOp::Shadow(_) => {
+                    return Err(PdfError::InvalidGeometry {
+                        page: 0,
+                        op: None,
+                        field: "unexpanded shadow",
+                    });
+                }
+                DrawOp::RoundedRect(rect) => {
+                    fill_color(&mut content, rect.color);
+                    rounded_path(&mut content, rect.rect, rect.radius, page.size.height);
+                    content.fill_nonzero();
+                }
+                DrawOp::StrokeRoundedRect(rect) => {
+                    let [r, g, b] = rgb(rect.color);
+                    content.set_stroke_rgb(r, g, b);
+                    content.set_line_width(rect.width);
+                    rounded_path(&mut content, rect.rect, rect.radius, page.size.height);
+                    content.stroke();
                 }
                 DrawOp::Rect(rect) => {
                     fill_color(&mut content, rect.color);
@@ -467,6 +494,41 @@ fn validate(display_list: &DisplayList, fallback: bool) -> Result<Vec<PdfWarning
                         index,
                         "unmatched transform end",
                     )?;
+                }
+                DrawOp::RoundedRect(r) => {
+                    validate_rect(r.rect, page.size.height).map_err(|field| {
+                        PdfError::InvalidGeometry {
+                            page: page_index,
+                            op: index,
+                            field,
+                        }
+                    })?;
+                    check(valid_radius(r.rect, r.radius), index, "corner radius")?;
+                }
+                DrawOp::StrokeRoundedRect(r) => {
+                    validate_rect(r.rect, page.size.height).map_err(|field| {
+                        PdfError::InvalidGeometry {
+                            page: page_index,
+                            op: index,
+                            field,
+                        }
+                    })?;
+                    check(valid_radius(r.rect, r.radius), index, "corner radius")?;
+                    check(positive(r.width), index, "stroke width")?;
+                }
+                DrawOp::Shadow(s) => {
+                    validate_ellipse(s.geometry.bounds(), page.size.height).map_err(|field| {
+                        PdfError::InvalidGeometry {
+                            page: page_index,
+                            op: index,
+                            field,
+                        }
+                    })?;
+                    shadow::validate(s).map_err(|field| PdfError::InvalidGeometry {
+                        page: page_index,
+                        op: index,
+                        field,
+                    })?;
                 }
                 DrawOp::Image(image) => {
                     validate_rect(image.rect, page.size.height).map_err(|field| {
@@ -695,6 +757,9 @@ fn transformed_geometry_is_finite(op: &DrawOp, transform: Transform, height: f32
     match op {
         DrawOp::BeginTransform(_) | DrawOp::EndTransform => true,
         DrawOp::Rect(r) => rect(r.rect),
+        DrawOp::RoundedRect(r) => rect(r.rect),
+        DrawOp::StrokeRoundedRect(r) => rect(r.rect),
+        DrawOp::Shadow(s) => rect(s.geometry.bounds()),
         DrawOp::StrokeRect(r) => rect(r.rect),
         DrawOp::Ellipse(r) => rect(r.bounds),
         DrawOp::StrokeEllipse(r) => rect(r.bounds),
@@ -753,6 +818,27 @@ fn positive(value: f32) -> bool {
 }
 fn nonnegative(value: f32) -> bool {
     value.is_finite() && value >= 0.0
+}
+
+fn valid_radius(rect: o2p_core::Rect, radius: f32) -> bool {
+    radius.is_finite() && radius >= 0.0 && radius <= rect.size.width.min(rect.size.height) / 2.0
+}
+fn rounded_path(content: &mut Content, rect: o2p_core::Rect, r: f32, height: f32) {
+    let x = rect.origin.x;
+    let y = height - rect.origin.y - rect.size.height;
+    let w = rect.size.width;
+    let h = rect.size.height;
+    let k = 0.5522848 * r;
+    content.move_to(x + r, y);
+    content.line_to(x + w - r, y);
+    content.cubic_to(x + w - r + k, y, x + w, y + r - k, x + w, y + r);
+    content.line_to(x + w, y + h - r);
+    content.cubic_to(x + w, y + h - r + k, x + w - r + k, y + h, x + w - r, y + h);
+    content.line_to(x + r, y + h);
+    content.cubic_to(x + r - k, y + h, x, y + h - r + k, x, y + h - r);
+    content.line_to(x, y + r);
+    content.cubic_to(x, y + r - k, x + r - k, y, x + r, y);
+    content.close_path();
 }
 
 #[cfg(test)]

@@ -29,10 +29,10 @@ supported widths/transforms and unexpected structural text return
 errors. The existing per-part XML byte/node/depth limits apply to every theme.
 Metadata-only parsing and `inspect` still leave theme contents opaque.
 
-Empty `effectStyleLst` and empty effect containers carry no effects. Nonempty
-advanced effect content warns at its boundary; no effect matrix is implemented.
-An `effectRef` of zero means no effect. Other/malformed effect references warn
-and omit the effect. Independent supported fill/line/font components still work.
+Fidelity 2B adds ordered outer-shadow effect entries. Empty lists mean no
+effect; positive `effectRef` indices select entry `idx-1`, while zero means
+no effect. Unsupported effects remain diagnosed without shifting entries.
+See [EFFECTS.md](EFFECTS.md) for supported fields, precedence and bounded blur.
 
 ## Index mapping
 
@@ -167,3 +167,18 @@ the effective map through the central color adapter. Direct/inherited properties
 still precede separately merged references; references precede applicable master
 text styles. See [THEMES.md](THEMES.md) and [INHERITANCE.md](INHERITANCE.md).
 The earlier deferred-text/color-map statements above describe 1I-C history.
+
+## Fidelity 2B effect matrix
+
+Fidelity 2B adds an ordered outer-shadow effect matrix. Empty effect lists mean
+no effect; positive `effectRef` indices select entry `idx-1`, while zero means
+no effect. Unsupported effects remain diagnosed without shifting entries.
+Direct local effects (including explicit empty lists) override inherited and
+style-referenced effects. Independent fill/line/font components still work.
+See [EFFECTS.md](EFFECTS.md) for supported fields, precedence and bounded blur.
+
+`StyleMatrix::effect_style_count()` reports the fourth ordered collection.
+Deferred colors share the existing centralized resolver; shadow alpha is
+accepted only for effect colors. Shape and picture references resolve the same
+outer-shadow subset. Unsupported theme 3D/effect siblings stay visible as
+structured diagnostics.

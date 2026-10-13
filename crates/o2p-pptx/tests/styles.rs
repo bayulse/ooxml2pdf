@@ -272,14 +272,14 @@ fn unsupported_background_line_entries_and_effects_warn_even_when_overridden() {
     .unwrap();
     assert_eq!(first_paint(&model).1.unwrap().width, 4.0);
     warning(&model, "unknownLine");
-    let theme = style_theme().replace("<a:effectStyleLst/>", "<a:effectStyleLst><a:effectStyle><a:effectLst><a:outerShdw/></a:effectLst></a:effectStyle></a:effectStyleLst>");
+    let theme = style_theme().replace("<a:effectStyleLst/>", "<a:effectStyleLst><a:effectStyle><a:effectLst><a:innerShdw/></a:effectLst></a:effectStyle></a:effectStyleLst>");
     warning(
         &parse(&attach_theme(
             inheritance_deck("", "", "", "", "", ""),
             &theme,
         ))
         .unwrap(),
-        "effectStyleLst",
+        "innerShdw",
     );
     let model = parse(&style_deck(
         "",

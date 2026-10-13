@@ -4,9 +4,11 @@
 //! x increasing rightward and y increasing downward. Operations paint in order.
 //! This crate performs no layout, font discovery, shaping, or file I/O.
 
+mod effects;
 mod glyph;
 mod text;
 mod transform;
+pub use effects::{RoundedRectOp, Shadow, ShadowGeometry, ShadowOp, StrokeRoundedRectOp};
 pub use glyph::{FontResource, Glyph, GlyphRun, GlyphTextOp, ShapedText};
 pub use transform::Transform;
 
@@ -160,6 +162,9 @@ pub enum DrawOp {
     Text(TextOp),
     Rect(RectOp),
     StrokeRect(StrokeRectOp),
+    RoundedRect(RoundedRectOp),
+    StrokeRoundedRect(StrokeRoundedRectOp),
+    Shadow(ShadowOp),
     Ellipse(EllipseOp),
     StrokeEllipse(StrokeEllipseOp),
     Line(LineOp),

@@ -327,15 +327,15 @@ fn unsupported_formats_and_picture_behaviors_produce_structured_warnings() {
         ),
         (
             "</p:spPr>",
-            "<a:effectLst><a:outerShdw/></a:effectLst></p:spPr>",
-            "effectLst",
+            "<a:effectLst><a:innerShdw/></a:effectLst></p:spPr>",
+            "innerShdw",
         ),
     ] {
         let mut parts = base.clone();
         mutate(&mut parts, "ppt/slides/slide1.xml", from, to);
         let model = parse(&parts).unwrap();
         assert!(
-            model.slide_contents()[0].shapes().is_empty(),
+            model.slide_contents()[0].shapes().is_empty() == (diagnostic != "innerShdw"),
             "{diagnostic}"
         );
         assert!(

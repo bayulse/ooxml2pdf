@@ -375,6 +375,21 @@ See [Fidelity 2A report](../compat/reports/FIDELITY_2A.md),
 Presentation defaultTextStyle, script-specific typography, bullets, spacing,
 autofit, vertical writing/anchor behavior, and advanced effects remain deferred.
 
+## Fidelity 2B — Rounded geometry and outer shadows (implemented)
+
+- Native generic vector rounded rectangles; DrawingML default and literal `adj`
+  radius adjustment, fill/no-fill/outline, text and transforms.
+- Direct and theme/style outer shadows for rectangles, rounded rectangles,
+  ellipses and alpha-aware images; local effect precedence and paint order.
+- Bounded local soft-mask blur using existing dependencies; allocation and
+  malformed-input regressions. Eleven focused synthetic fixtures.
+- Public corpus comparison remains unchanged because those inputs differ from
+  the reference presentations and contain neither feature. A separate paired
+  reference-input comparison improves every slide. All cases remain
+  MAJOR_DIFFERENCE; this does not establish complete PowerPoint fidelity.
+- [EFFECTS.md](EFFECTS.md) documents model and limits;
+  [FIDELITY_2B.md](../compat/reports/FIDELITY_2B.md) records measurements.
+
 ## Next renderer milestones — selected from corpus evidence
 
 1. Preserve the independent PowerPoint references already collected and add a

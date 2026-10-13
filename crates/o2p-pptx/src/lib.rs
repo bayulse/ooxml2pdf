@@ -8,6 +8,7 @@ mod color_map;
 pub use color_map::ColorMap;
 mod text_defaults;
 pub use text_defaults::{MasterTextStyles, TextListStyle};
+mod effects;
 mod font_layout;
 mod inheritance;
 mod model;

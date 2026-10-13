@@ -160,8 +160,17 @@ impl Parser<'_> {
                     (self.dml, "pattFill"),
                     (self.dml, "grpFill"),
                     (self.dml, "ln"),
+                    (self.dml, "effectLst"),
                 ],
             );
+            let mut context = crate::theme_xml::Context {
+                color_map: Some(&self.color_map),
+                part: self.reference.part_name(),
+                slide_id: Some(self.reference.id()),
+                warnings: self.warnings,
+            };
+            properties.effect = crate::effects::list(sp, self.dml, &mut context)?
+                .map(|entry| entry.and_then(|s| s.resolve(self.theme, None, &mut context)));
             if let Some(xfrm) = self.single(sp, self.dml, "xfrm")? {
                 (properties.geometry, properties.geometry_blocked) = self.sparse_geometry(xfrm)?;
             }
@@ -171,14 +180,29 @@ impl Parser<'_> {
                 let preset = geom
                     .attribute("prst")
                     .ok_or_else(|| self.invalid("prstGeom missing prst"))?;
-                if !matches!(preset, "rect" | "ellipse" | "line") {
+                if !matches!(preset, "rect" | "roundRect" | "ellipse" | "line") {
                     self.warn(format!(
                         "unsupported placeholder preset {}",
                         xml::expanded(None, preset)
                     ));
                 }
                 properties.preset = Some(preset.into());
+                if preset == "roundRect" {
+                    properties.radius_adjustment = Some(self.rounded_radius(
+                        geom,
+                        Rect {
+                            origin: Point { x: 0.0, y: 0.0 },
+                            size: o2p_core::Size {
+                                width: 1.0,
+                                height: 1.0,
+                            },
+                        },
+                    )?);
+                }
                 for child in geom.children().filter(|n| n.is_element()) {
+                    if preset == "roundRect" && child.has_tag_name((self.dml, "avLst")) {
+                        continue;
+                    }
                     if child.has_tag_name((self.dml, "avLst"))
                         && !child.children().any(|n| n.is_element())
                     {
@@ -478,6 +502,13 @@ impl Parser<'_> {
         });
         let mut shapes = vec![];
         match props.preset.as_deref().unwrap_or("text") {
+            "roundRect" => shapes.push(Shape::RoundedRectangle {
+                rect,
+                radius: rect.size.width.min(rect.size.height)
+                    * props.radius_adjustment.unwrap_or(0.16667),
+                fill: props.fill.flatten(),
+                stroke,
+            }),
             "rect" => shapes.push(Shape::Rectangle {
                 rect,
                 fill: props.fill.flatten(),
@@ -509,6 +540,24 @@ impl Parser<'_> {
             _ => {
                 self.warn("unsupported inherited placeholder preset: element omitted".into());
                 return Ok(vec![]);
+            }
+        }
+        if let Some(effect) = props.effect.flatten() {
+            if !matches!(props.fill.flatten(), Some(Fill::Solid(_)))
+                && stroke.is_none()
+                && self.single(node, self.pml, "txBody")?.is_some()
+            {
+                self.warn("text shadow unsupported; shape has no painted silhouette".into());
+            } else if let Some(shape) = shapes.pop() {
+                if matches!(shape, Shape::Line { .. }) {
+                    self.warn("outer shadow on line geometry unsupported; effect omitted".into());
+                    shapes.push(shape);
+                } else {
+                    shapes.push(Shape::Shadowed {
+                        shadow: effect.local(transform),
+                        element: Box::new(shape),
+                    });
+                }
             }
         }
         if let Some(body) = self.single(node, self.pml, "txBody")? {

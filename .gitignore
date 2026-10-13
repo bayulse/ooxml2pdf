@@ -49,3 +49,4 @@ Desktop.ini
 /compat/references/local/
 /compat/.venv/
 /compat/**/__pycache__/
+/compat/corpus/paired-local/

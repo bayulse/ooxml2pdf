@@ -296,3 +296,29 @@ The remaining text fallback is a body placeholder in 004-theme-layout with no
 resolved text color. Remaining notesSz, sldMasterIdLst, sldLayoutIdLst and legacy
 unwrapped-overflow diagnostics are unchanged. Batch exit 1 is expected while
 cases remain MAJOR_DIFFERENCE; it does not mean conversion or tooling failed.
+
+## Fidelity 2B: source identity and rounded geometry/shadows
+
+The six `compat/corpus/public` PPTX files are generated engine exercises. The
+PowerPoint PPTX files in `compat/references/local` are different presentations:
+matching filenames do not establish matching input identity. Generated public
+inputs have no rounded rectangles or outer shadows; local reference inputs
+contain the visible rounded cards/buttons and theme shadows. The requested
+public batch is therefore retained as a historical comparison, not a paired
+visual-fidelity benchmark for these effects. It remains unchanged (all six
+MAJOR_DIFFERENCE, twenty warnings).
+
+Fidelity 2B also compares the actual local reference PPTX inputs against their
+existing PowerPoint PNGs, using a pre-edit baseline adapter and the current
+adapter with identical fonts, DPI, references and thresholds. All twelve paired
+slides improve, though all six cases still rate MAJOR_DIFFERENCE. The full
+before/after tables, warnings, source hashes and visual review are in
+[FIDELITY_2B.md](../compat/reports/FIDELITY_2B.md). No corpus input, reference or
+metric threshold was modified. The supplemental command is:
+
+```sh
+compat/.venv/bin/python compat/scripts/compat.py batch compat/references/local \
+  --reference-root compat/references/local --font-dir fixtures/fonts \
+  --output-dir target/fidelity2b/paired-after-images \
+  --report-dir target/fidelity2b/paired-after
+```

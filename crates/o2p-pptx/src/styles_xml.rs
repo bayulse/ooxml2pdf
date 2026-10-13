@@ -59,14 +59,17 @@ pub(crate) fn matrix(
     if let Some(effects) = optional(node, ns, "effectStyleLst", context)? {
         context.attributes(effects, &[]);
         context.element_only(effects)?;
-        // Empty effect containers carry no rendering semantics. Never parse effects.
-        if effects.descendants().skip(1).any(|n| {
-            n.is_element()
-                && (n.tag_name().namespace() != Some(ns)
-                    || !matches!(n.tag_name().name(), "effectStyle" | "effectLst")
-                    || n.attributes().len() != 0)
-        }) {
-            context.warn("effectStyleLst: advanced effects unsupported".into());
+        for entry in effects.children().filter(|n| n.is_element()) {
+            if !entry.has_tag_name((ns, "effectStyle")) {
+                context.warn("unsupported effect style entry".into());
+                matrix.effects.push(None);
+                continue;
+            }
+            context.attributes(entry, &[]);
+            context.other_children(entry, ns, &["effectLst"]);
+            matrix
+                .effects
+                .push(crate::effects::list(entry, ns, context)?.flatten());
         }
     }
     Ok(matrix)
@@ -274,10 +277,27 @@ pub(crate) fn references(
     }
     if let Some(effect) = optional(node, ns, "effectRef", context)? {
         context.attributes(effect, &["idx"]);
-        if index(effect, context) != Some(0) {
-            context.warn("style effectRef: advanced effects unsupported; effect omitted".into());
-        }
-        reference_color(effect, ns, theme, context)?;
+        let index = index(effect, context);
+        let placeholder = reference_color(effect, ns, theme, context)?;
+        defaults.effect = Some(if index == Some(0) {
+            None
+        } else {
+            match index
+                .and_then(|i| i.checked_sub(1))
+                .and_then(|i| theme.and_then(|t| t.styles.effects.get(i as usize)))
+            {
+                Some(entry) => entry
+                    .as_ref()
+                    .and_then(|s| s.resolve(theme, placeholder, context)),
+                None => {
+                    context.warn(
+                        "style effectRef: theme effect unavailable/out of range; effect omitted"
+                            .into(),
+                    );
+                    None
+                }
+            }
+        });
     }
     Ok(defaults)
 }

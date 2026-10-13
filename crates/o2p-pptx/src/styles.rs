@@ -9,9 +9,13 @@ pub struct StyleMatrix {
     pub(crate) fills: Vec<StyleFill>,
     pub(crate) lines: Vec<StyleLine>,
     pub(crate) backgrounds: Vec<StyleFill>,
+    pub(crate) effects: Vec<Option<crate::effects::OuterShadow>>,
 }
 
 impl StyleMatrix {
+    pub fn effect_style_count(&self) -> usize {
+        self.effects.len()
+    }
     pub fn fill_style_count(&self) -> usize {
         self.fills.len()
     }
@@ -56,10 +60,12 @@ pub(crate) struct StyleDefaults {
     pub line_width: Option<f32>,
     pub line_color: Option<Option<Color>>,
     pub text: PlaceholderTextDefaults,
+    pub effect: Option<Option<crate::effects::ResolvedShadow>>,
 }
 impl StyleDefaults {
     pub fn inherit(&mut self, parent: &Self) {
         self.fill = self.fill.or(parent.fill);
+        self.effect = self.effect.or(parent.effect);
         self.line_width = self.line_width.or(parent.line_width);
         self.line_color = self.line_color.or(parent.line_color);
         self.text.inherit(&parent.text);
