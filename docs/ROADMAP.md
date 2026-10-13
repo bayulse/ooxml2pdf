@@ -329,6 +329,39 @@ See [STYLES.md](STYLES.md), [THEMES.md](THEMES.md) and
 Advanced gradients/patterns/effects, arrows, groups, charts, SmartArt, animations,
 full text hierarchy, DOCX/XLSX and Flutter remain outside scope.
 
+## Milestone 1J — Compatibility and fidelity evaluation (complete)
+
+Baseline: `v0.1.0-alpha.4` / `82e9e8a`.
+
+- Add six original composed public decks and ignored private corpus/reference paths.
+- Add separate development conversion telemetry, Poppler rasterization and
+  SSIM-style/color comparison with explicit reference-renderer provenance.
+- Record PDF counts/sizes, raster dimensions, timing, warning groups, per-slide
+  metrics and conservative case ratings in JSON and Markdown.
+- Add batch summaries and warning-frequency/affected-case fidelity-gap reports.
+- Preserve runtime libraries, dependency graphs and all existing rendering scope.
+
+See [COMPATIBILITY.md](COMPATIBILITY.md) for setup, local PowerPoint exports,
+private testing, metric limits and report interpretation. Public cases without
+independent references remain NOT_COMPARED; successful rendering alone is not
+evidence of Office fidelity.
+
+## Next renderer milestones — selected from corpus evidence
+
+1. Collect reviewed PowerPoint references and a representative ignored private
+   corpus. Preserve reference versions, fonts, export settings and input identity.
+2. Review visual major/minor differences alongside fidelity-gap frequency and
+   affected-case counts. Distinguish missing implementation from font setup,
+   exporter variation and existing behavior defects.
+3. Rank concrete gaps by observed impact and recurrence. Document evidence and
+   choose a bounded renderer milestone only after this review; do not infer a
+   gradients/groups/typography priority from speculative feature lists.
+4. Add original regression reproductions, implement the selected fix/feature in
+   the existing pipeline, and compare against the committed baseline with the
+   same reference and metric settings.
+5. Keep DOCX, XLSX, Flutter and advanced Office features outside the current
+   milestone unless explicitly requested. Reassess scope from corpus evidence.
+
 ## Validation
 
 ```sh

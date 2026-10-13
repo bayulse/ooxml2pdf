@@ -125,6 +125,13 @@ cargo test --workspace
 See [the architecture decisions](docs/ARCHITECTURE.md) and
 [the product specification](docs/PRODUCT_SPEC.md).
 
+The [compatibility evaluation workflow](docs/COMPATIBILITY.md) provides six
+original public PPTX decks, local PowerPoint/LibreOffice reference metadata,
+Poppler rasterization, visual comparison, warning aggregation and JSON/Markdown
+reports. Tooling stays separate from runtime libraries. See the
+[initial corpus observations](compat/reports/BASELINE.md); independent Office
+fidelity remains unassessed until references are supplied.
+
 
 Milestone 1G-A adds configured font resolution, Unicode shaping and embedded
 TrueType PDF text. Supply fonts explicitly; no system discovery or default font

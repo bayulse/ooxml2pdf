@@ -1,0 +1,2 @@
+# Evaluation only; never installed or linked by Cargo.
+Pillow==12.3.0

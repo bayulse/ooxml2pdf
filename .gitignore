@@ -37,3 +37,15 @@ graphify-out/
 .DS_Store
 Thumbs.db
 Desktop.ini
+
+# Private compatibility corpus
+/compat/corpus/real-private/
+/compat/references/private/
+/compat/outputs/private/
+/compat/corpus/private/
+/compat/reports/private/
+/compat/outputs/public/
+/compat/reports/public/
+/compat/references/local/
+/compat/.venv/
+/compat/**/__pycache__/
