@@ -65,6 +65,66 @@ pub struct FontScheme {
 pub struct Theme {
     pub colors: ColorScheme,
     pub fonts: FontScheme,
+    pub styles: crate::StyleMatrix,
+}
+
+/// Deferred colors allow scheme lookup and phClr substitution at the reference.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct ColorValue {
+    pub base: ColorBase,
+    pub transforms: Vec<(ColorTransformKind, i32)>,
+}
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) enum ColorBase {
+    Rgb(Color),
+    Scheme(String),
+    Unavailable,
+}
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum ColorTransformKind {
+    Tint,
+    Shade,
+    LumMod,
+    LumOff,
+}
+
+impl ColorValue {
+    pub(crate) fn resolve(
+        &self,
+        theme: Option<&Theme>,
+        placeholder: Option<Color>,
+        context: &mut crate::theme_xml::Context<'_>,
+    ) -> Option<Color> {
+        let base = match &self.base {
+            ColorBase::Rgb(color) => Some(*color),
+            ColorBase::Unavailable => None,
+            ColorBase::Scheme(name) => {
+                let color = if name == "phClr" {
+                    placeholder
+                } else {
+                    theme.and_then(|theme| theme.resolve_color(name))
+                };
+                if color.is_none() {
+                    context.warn(format!("schemeClr {}: theme color unavailable; paint omitted or paragraph/default text color retained", crate::xml::expanded(None, name)));
+                }
+                color
+            }
+        }?;
+        let transforms: Vec<_> = self
+            .transforms
+            .iter()
+            .map(|&(kind, value)| {
+                let value = f64::from(value) / 100_000.0;
+                match kind {
+                    ColorTransformKind::Tint => ColorTransform::Tint(value),
+                    ColorTransformKind::Shade => ColorTransform::Shade(value),
+                    ColorTransformKind::LumMod => ColorTransform::LumMod(value),
+                    ColorTransformKind::LumOff => ColorTransform::LumOff(value),
+                }
+            })
+            .collect();
+        Some(transform_color(base, &transforms))
+    }
 }
 
 impl Theme {

@@ -245,3 +245,23 @@ Ancestor prompt text must never appear. See [inheritance semantics](../../docs/I
 cargo run --offline -p o2p-pptx --example generate_fixtures
 cargo run --offline -p o2p-cli -- convert fixtures/pptx/layout-master-inheritance.pptx --font-dir fixtures/fonts -o target/layout-master-inheritance.pdf
 ```
+
+## DrawingML style matrix (Milestone 1I-C)
+
+Twelve original synthetic packages extend the deterministic fixture generator:
+
+- `style-fill-ref.pptx`, `style-line-ref.pptx`, `style-fill-and-line-ref.pptx`:
+  reference solid fill/line entries, including reference-color substitution.
+- `style-local-fill-overrides-ref.pptx`, `style-local-line-overrides-ref.pptx`:
+  direct paint/width overrides take priority.
+- `master-style-ref.pptx`, `layout-style-ref.pptx`: ancestor placeholders donate
+  references; decorative ellipses render once and prompts never duplicate.
+- `background-style-ref.pptx`: bgRef 1001 uses the first background-fill entry.
+- `theme-font-ref.pptx`: major Latin fontRef with selectable Unicode text.
+- `unsupported-gradient-style-ref.pptx`: recognized gradient warns; no approximation.
+- `malformed-style-index.pptx`: malformed fillRef warns; referenced paint omitted.
+- `style-matrix-demo.pptx`: pale style-based background, blue referenced fill,
+  referenced outline and orange local override, with themed embedded-font text.
+
+Regenerate with `cargo run --offline -p o2p-pptx --example generate_fixtures`.
+See [STYLES.md](../../docs/STYLES.md) for supported styles, indexing and fallbacks.

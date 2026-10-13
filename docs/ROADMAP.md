@@ -299,9 +299,35 @@ Baseline: `578453b`.
   the `layout-master-inheritance.pptx` end-to-end demonstration.
 
 Exact contracts and deferred behavior are in [INHERITANCE.md](INHERITANCE.md).
-Milestone 1I-C will address the DrawingML style matrix; full txStyles, grouped
+Milestone 1I-C below addresses the DrawingML style matrix; full txStyles, grouped
 shapes, charts, SmartArt, notes/comments, animations, DOCX/XLSX and Flutter remain
 outside this milestone.
+
+## Milestone 1I-C — DrawingML style matrix and fidelity cleanup (complete)
+
+Baseline: `336f4e2`.
+
+- Parse bounded fmtScheme fillStyleLst, lnStyleLst and bgFillStyleLst into an
+  owned minimal PPTX StyleMatrix; retain unsupported entry positions.
+- Resolve fillRef/lnRef/bgRef with tested one-based/split-index semantics,
+  no-fill sentinels and diagnosed malformed/out-of-range references.
+- Reuse central scheme-color resolution and transform math; substitute phClr
+  from the reference color before applying matrix transforms.
+- Keep local/inherited direct properties above separately merged references.
+- Resolve solid/no-fill paints and conservative Latin fontRef roles on ordinary,
+  text-bearing and inherited shapes without changing visual layers/background priority.
+- Warn/fallback for complex fills, effects, line decorations and unavailable styles.
+- Add twelve reproducible fixtures, parser/inheritance/PDF/CLI/security regressions
+  and a visible style-matrix demo. No dependency or generic renderer changes.
+
+```sh
+cargo run --offline -p o2p-cli -- convert fixtures/pptx/style-matrix-demo.pptx --font-dir fixtures/fonts -o target/style-matrix-demo.pdf
+```
+
+See [STYLES.md](STYLES.md), [THEMES.md](THEMES.md) and
+[INHERITANCE.md](INHERITANCE.md) for exact semantics and remaining fidelity limits.
+Advanced gradients/patterns/effects, arrows, groups, charts, SmartArt, animations,
+full text hierarchy, DOCX/XLSX and Flutter remain outside scope.
 
 ## Validation
 

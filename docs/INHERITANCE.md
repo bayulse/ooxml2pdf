@@ -1,4 +1,4 @@
-# PPTX slide inheritance — Milestone 1I-B
+# PPTX slide inheritance — Milestones 1I-B / 1I-C
 
 Baseline: committed `578453b`. Inheritance is an additive PPTX semantic stage:
 
@@ -65,7 +65,8 @@ never synthesized. Placeholder pictures remain unsupported and warn/omit.
 ## Precedence and fallbacks
 
 For each supported property, the order is **slide local -> matching layout ->
-matching master -> existing documented fallback**. Layouts retain effective
+matching master direct formatting -> nearest referenced theme style -> existing
+documented fallback**. Layouts retain effective
 master defaults before slides are resolved. Present `false`, zero dimensions,
 `noFill`, or unsupported explicit paint are never mistaken for absence.
 
@@ -100,17 +101,19 @@ defaults are used. Paragraph levels above zero warn and use generic defaults
 with local direct properties. This is not the complete txStyles/list hierarchy.
 
 Only the listed properties inherit. Ancestor bodyPr insets/writing mode,
-bullets, spacing, effects, style references and complex semantics warn and remain
-unsupported. Local/default insets, wrapping, Unicode shaping, font substitution,
+bullets, spacing, effects and complex semantics warn and remain unsupported.
+Basic style references are supported by 1I-C; their defaults remain separate
+from direct properties until the entire inheritance chain has been merged. Local/default insets, wrapping, Unicode shaping, font substitution,
 embedding and ToUnicode/ActualText continue through the existing path.
 
 ## Background and visual layers
 
 The effective background is selected by the **presence** of `p:bg`: slide ->
 layout -> master. Supported direct solid backgrounds resolve through the common
-color adapter. Explicit noFill stops background inheritance. An explicit bgRef
-or unsupported fill warns and leaves paint unavailable; it does not reveal an
-ancestor background by accident. bgRef and bgFillStyleLst await Milestone 1I-C.
+color adapter. Explicit noFill stops background inheritance. An explicit bgRef resolves through the selected source theme and the shared
+fill/background index space. Unsupported/unavailable fills warn and leave paint
+unavailable; they do not reveal an ancestor background by accident. Explicit
+no-fill style indices also stop background inheritance. See [STYLES.md](STYLES.md).
 
 Painting is deterministic:
 
@@ -135,8 +138,7 @@ including hidden slides. `showMasterPhAnim` warns; animations remain unsupported
 
 These are intentionally basic layering semantics. Header/footer/date/slide-number
 fields, layout-switch behavior, special placeholder content, full master text
-styles, theme override/color-map behavior, style-matrix fill/line/effect/background
-lists, grouped shapes, charts, SmartArt, notes/comments and animations remain
+styles, theme override/color-map behavior, advanced style-matrix fills/effects, grouped shapes, charts, SmartArt, notes/comments and animations remain
 deferred. DOCX, XLSX and Flutter are outside scope.
 
 ## Validation and demonstration
@@ -160,3 +162,15 @@ the newly required missing-layout warning; rendering checks remain intact.
 
 Reference: [Microsoft's slide master documentation](https://learn.microsoft.com/en-us/office/open-xml/presentation/working-with-slide-masters)
 and [slide layout visibility documentation](https://learn.microsoft.com/en-us/office/open-xml/presentation/working-with-slide-layouts).
+
+## Style references (Milestone 1I-C)
+
+For supported paint/font properties, precedence is local direct formatting ->
+inherited placeholder direct formatting (layout before master) -> referenced
+theme defaults (slide before layout before master) -> existing fallback.
+References never become direct properties on donors. The public text-default
+getter includes effective fontRef defaults. Width and color remain independent;
+explicit noFill/zero/unsupported direct values block referenced values.
+Decorative shapes resolve references at their own source, without changing
+visual layers, geometry, transforms or prompt suppression. See
+[STYLES.md](STYLES.md) for supported styles, index mapping and fidelity limits.

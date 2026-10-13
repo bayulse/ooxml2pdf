@@ -1,4 +1,4 @@
-# PPTX themes and fidelity — Milestones 1I-A / 1I-B
+# PPTX themes and fidelity — Milestones 1I-A / 1I-B / 1I-C
 
 Baseline: `f392e61`. This milestone resolves directly referenced theme colors and
 explicit Latin theme font tokens. Theme semantics live entirely in `o2p-pptx`.
@@ -25,7 +25,7 @@ Dangling internal targets remain errors from the existing OPC reader.
 `Presentation::parse_with_content()` loads the presentation theme before content,
 and caches reachable layout/master semantic models during inheritance traversal.
 `Presentation::theme()` exposes an owned optional `Theme`, with `ColorScheme`,
-`FontScheme` and `ThemeFonts`. The model contains concrete core RGB colors,
+`FontScheme`, `ThemeFonts` and the owned `StyleMatrix` in `Theme::styles`. The model contains concrete core RGB colors,
 owned typeface strings and script mappings, never XML nodes or parser types.
 It outlives the package. Layout/master `theme()` getters expose their scoped
 effective theme; `Presentation::theme()` retains its presentation-only contract.
@@ -72,8 +72,9 @@ invented Office palette. Every unresolved slide reference produces a
 slide-scoped `UnsupportedSlideContent` warning describing the fallback.
 Explicit font/color values continue to override local defaults.
 
-`bg1`, `bg2`, `tx1`, `tx2` and `phClr` require color-map/style semantics; they
-warn and remain unresolved. This milestone does not infer the usual dk/lt mapping
+`bg1`, `bg2`, `tx1` and `tx2` require color-map semantics and remain unresolved.
+`phClr` is supported inside style-matrix entries through reference-color
+substitution; outside that context it warns and remains unavailable. This milestone does not infer the usual dk/lt mapping
 or reinterpret a master color map.
 
 ## Conservative color transforms
@@ -129,9 +130,11 @@ compatibility path retains its font-selection limits; supply fonts for fidelity.
 
 Basic master/layout/placeholder geometry, paint, text defaults and backgrounds
 are supported by 1I-B; see [INHERITANCE.md](INHERITANCE.md) for precedence and limits.
-Full txStyles, theme overrides, style-matrix fill/line/effect/background lists, grouped shapes,
-charts, SmartArt or animations are implemented. `fmtScheme` and unsupported theme
-subtrees warn at their boundary and remain opaque. DOCX, XLSX and Flutter stay
+Milestone 1I-C resolves solid/no-fill format-matrix fills, lines and backgrounds,
+and conservative fontRef defaults. See [STYLES.md](STYLES.md) for indexing,
+precedence, phClr, warnings and fallbacks. Full txStyles, theme overrides, effect
+styles, grouped shapes, charts, SmartArt and animations remain unsupported.
+Unsupported theme subtrees warn at their boundary. DOCX, XLSX and Flutter stay
 outside scope. Existing shape/image/text z-order, wrapping, transforms, Unicode,
 font embedding and ToUnicode/ActualText serialization are preserved.
 
@@ -148,3 +151,13 @@ cargo fmt
 cargo clippy --workspace --all-targets --all-features
 cargo test --workspace
 ```
+
+## Milestone 1I-C integration
+
+`fmtScheme` is now parsed through the existing bounded theme adapter. Matrix
+colors retain owned deferred expressions and share the direct-color resolver
+and transform math. Supported indices resolve only after the scoped theme and
+reference color are known. Direct/inherited placeholder formatting has priority
+over references; reference defaults precede generic fallback. `fontRef major`
+and `minor` use the existing Latin family resolver. No generic rendering or
+font-library dependencies change. See [STYLES.md](STYLES.md).

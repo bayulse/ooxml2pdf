@@ -12,8 +12,11 @@ pub use inheritance::{
     Placeholder, PlaceholderGeometry, PlaceholderTextDefaults, SlideLayout, SlideMaster,
 };
 mod slide;
+mod styles;
+mod styles_xml;
 mod theme;
 mod theme_xml;
+pub use styles::StyleMatrix;
 mod xml;
 pub use theme::{ColorScheme, FontScheme, Theme, ThemeColorSlot, ThemeFonts};
 

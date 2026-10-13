@@ -19,6 +19,7 @@ fn main() -> std::io::Result<()> {
         .chain(support::transform_fixtures())
         .chain(support::theme_fixtures())
         .chain(support::inheritance_fixtures())
+        .chain(support::style_fixtures())
     {
         fs::write(directory.join(name), support::zip(&parts, true, false))?;
     }

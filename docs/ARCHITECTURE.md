@@ -1,7 +1,7 @@
 This document records completed milestones chronologically. Milestone 1G-B
 describes the current configured-font layout path and the final Milestone 1H
 section adds individual element transforms. Milestone 1I-A below adds explicit
-theme resolution; Milestone 1I-B adds structural inheritance. Earlier standard-font descriptions
+theme resolution; Milestone 1I-B adds structural inheritance; 1I-C adds DrawingML format styles. Earlier standard-font descriptions
 remain the compatibility-path history.
 
 # Milestone 0: Common DisplayList to PDF
@@ -1176,3 +1176,25 @@ source model APIs, theme selection, visibility, background rules and limitations
 The full txStyles hierarchy and DrawingML style matrix remain deferred to later
 milestones. Required missing-layout warnings are now present for earlier decks
 without layouts; their deterministic rendering contracts remain unchanged.
+
+# Milestone 1I-C: DrawingML format styles and fidelity cleanup
+
+Baseline: committed `336f4e2`. The additive PPTX path is style references ->
+scoped theme fmtScheme -> effective fill/line/background and font defaults ->
+existing normalized Slide/Shape/TextStyle -> generic layout/DisplayList -> PDF.
+
+`Theme::styles` owns a minimal StyleMatrix with ordered fill, line and background
+collections, including unsupported slots. Deferred owned colors reuse the
+central theme resolver/transform math with reference phClr substitution. Raw XML
+remains private. Split fill/background and one-based line indexing belong only
+to `o2p-pptx`. Reference defaults stay separate from sparse direct properties
+through inheritance so direct local and inherited formatting wins per property.
+The existing sparse line adapter is shared with style-bearing ordinary shapes.
+
+OPC mechanics, generic fonts/layout, DisplayList and PDF remain unchanged; no
+dependencies are added. Rectangles, ellipses, simple lines and text-bearing
+shapes gain solid/no-fill theme styles. Background presence/visual layering
+continues to follow 1I-B. Unsupported styles warn and omit affected paint rather
+than being approximated. Effect styles, gradients, patterns, decorations and
+PowerPoint text hierarchy remain deferred. See [STYLES.md](STYLES.md) for the
+model, exact indexing, precedence, warnings, fallbacks and validation fixtures.

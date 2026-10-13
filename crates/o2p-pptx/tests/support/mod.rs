@@ -104,8 +104,11 @@ mod themes;
 pub use themes::*;
 #[path = "inheritance.rs"]
 mod inheritance;
+mod styles;
 #[allow(unused_imports)]
 pub use inheritance::*;
+#[allow(unused_imports)]
+pub use styles::*;
 pub const NONTRIVIAL_RECT: (i64, i64, i64, i64) = (1_234_567, 765_432, 3_456_789, 2_345_678);
 
 pub fn solid(color: &str) -> String {

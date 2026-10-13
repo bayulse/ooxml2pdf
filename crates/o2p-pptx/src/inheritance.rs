@@ -90,6 +90,7 @@ pub(crate) struct Properties {
     pub line_width: Option<f32>,
     pub line_color: Option<Option<Color>>,
     pub text: PlaceholderTextDefaults,
+    pub references: crate::styles::StyleDefaults,
 }
 impl Properties {
     pub(crate) fn inherit(&mut self, parent: &Self) {
@@ -104,6 +105,16 @@ impl Properties {
         self.line_width = self.line_width.or(parent.line_width);
         self.line_color = self.line_color.or(parent.line_color);
         self.text.inherit(&parent.text);
+        self.references.inherit(&parent.references);
+    }
+
+    pub(crate) fn effective(&self) -> Self {
+        let mut effective = self.clone();
+        effective.fill = effective.fill.or(self.references.fill);
+        effective.line_width = effective.line_width.or(self.references.line_width);
+        effective.line_color = effective.line_color.or(self.references.line_color);
+        effective.text.inherit(&self.references.text);
+        effective
     }
 }
 
@@ -113,6 +124,7 @@ pub struct Placeholder {
     pub(crate) kind: String,
     pub(crate) idx: Option<u32>,
     pub(crate) properties: Properties,
+    pub(crate) resolved_text: PlaceholderTextDefaults,
 }
 impl Placeholder {
     pub fn kind(&self) -> &str {
@@ -125,7 +137,7 @@ impl Placeholder {
         &self.properties.geometry
     }
     pub fn text_defaults(&self) -> &PlaceholderTextDefaults {
-        &self.properties.text
+        &self.resolved_text
     }
 }
 

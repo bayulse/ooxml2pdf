@@ -19,6 +19,14 @@ wrapping, transform, theme and embedded-font paths remain in use.
 cargo run --offline -p o2p-cli -- convert fixtures/pptx/layout-master-inheritance.pptx --font-dir fixtures/fonts -o target/layout-master-inheritance.pdf
 ```
 
+Milestone 1I-C resolves DrawingML format-matrix fills, lines and backgrounds,
+with direct/inherited formatting precedence and conservative theme font roles.
+See [style rules and fidelity limits](docs/STYLES.md).
+
+```sh
+cargo run --offline -p o2p-cli -- convert fixtures/pptx/style-matrix-demo.pptx --font-dir fixtures/fonts -o target/style-matrix-demo.pdf
+```
+
 Generate the deterministic demo:
 
 ```sh

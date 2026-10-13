@@ -120,7 +120,10 @@ impl Parser<'_> {
         } else {
             None
         };
-        let mut properties = Properties::default();
+        let mut properties = Properties {
+            references: self.style_defaults(node)?.unwrap_or_default(),
+            ..Default::default()
+        };
         self.attributes(node, &[]);
         self.other_children(
             node,
@@ -128,6 +131,8 @@ impl Parser<'_> {
                 (self.pml, "nvSpPr"),
                 (self.pml, "spPr"),
                 (self.pml, "txBody"),
+                (self.pml, "style"),
+                (self.dml, "style"),
             ],
         );
         self.attributes(nv, &[]);
@@ -196,53 +201,7 @@ impl Parser<'_> {
                 properties.fill = Some(self.fill(sp)?);
             }
             if let Some(line) = self.single(sp, self.dml, "ln")? {
-                self.attributes(line, &["w", "cap", "cmpd", "algn"]);
-                self.element_only(line)?;
-                if line.attribute("w").is_some() {
-                    properties.line_width =
-                        Some(emu_to_points(self.integer(line, "w", 0, 20_116_800)?));
-                }
-                if self.has_fill(line) {
-                    properties.line_color = Some(match self.fill(line)? {
-                        Some(Fill::Solid(c)) => Some(c),
-                        _ => None,
-                    });
-                }
-                for name in ["cap", "cmpd", "algn"] {
-                    if line.attribute(name).is_some_and(|v| {
-                        !matches!(
-                            (name, v),
-                            ("cap", "flat") | ("cmpd", "sng") | ("algn", "ctr")
-                        )
-                    }) {
-                        self.warn(format!(
-                            "placeholder outline {name}: unsupported line semantics"
-                        ));
-                        properties.line_color = Some(None);
-                    }
-                }
-                for child in line.children().filter(|n| {
-                    n.is_element()
-                        && !matches!(
-                            n.tag_name().name(),
-                            "solidFill"
-                                | "noFill"
-                                | "gradFill"
-                                | "blipFill"
-                                | "pattFill"
-                                | "grpFill"
-                        )
-                }) {
-                    if child.has_tag_name((self.dml, "prstDash"))
-                        && child.attribute("val") == Some("solid")
-                    {
-                        self.attributes(child, &["val"]);
-                        self.leaf(child)?;
-                    } else {
-                        self.unsupported(child);
-                        properties.line_color = Some(None);
-                    }
-                }
+                self.line_properties(line, &mut properties)?;
             }
         }
         if let Some(body) = self.single(node, self.pml, "txBody")? {
@@ -251,8 +210,58 @@ impl Parser<'_> {
         Ok(Some(Placeholder {
             kind,
             idx,
+            resolved_text: properties.effective().text,
             properties,
         }))
+    }
+
+    pub(super) fn line_properties(
+        &mut self,
+        line: Node<'_, '_>,
+        properties: &mut Properties,
+    ) -> Result<(), PptxError> {
+        self.attributes(line, &["w", "cap", "cmpd", "algn"]);
+        self.element_only(line)?;
+        if line.attribute("w").is_some() {
+            properties.line_width = Some(emu_to_points(self.integer(line, "w", 0, 20_116_800)?));
+        }
+        if self.has_fill(line) {
+            properties.line_color = Some(match self.fill(line)? {
+                Some(Fill::Solid(c)) => Some(c),
+                _ => None,
+            });
+        }
+        for name in ["cap", "cmpd", "algn"] {
+            if line.attribute(name).is_some_and(|v| {
+                !matches!(
+                    (name, v),
+                    ("cap", "flat") | ("cmpd", "sng") | ("algn", "ctr")
+                )
+            }) {
+                self.warn(format!(
+                    "placeholder outline {name}: unsupported line semantics"
+                ));
+                properties.line_color = Some(None);
+            }
+        }
+        for child in line.children().filter(|n| {
+            n.is_element()
+                && !(n.tag_name().namespace() == Some(self.dml)
+                    && matches!(
+                        n.tag_name().name(),
+                        "solidFill" | "noFill" | "gradFill" | "blipFill" | "pattFill" | "grpFill"
+                    ))
+        }) {
+            if child.has_tag_name((self.dml, "prstDash")) && child.attribute("val") == Some("solid")
+            {
+                self.attributes(child, &["val"]);
+                self.leaf(child)?;
+            } else {
+                self.unsupported(child);
+                properties.line_color = Some(None);
+            }
+        }
+        Ok(())
     }
 
     pub(super) fn has_fill(&self, node: Node<'_, '_>) -> bool {
@@ -391,7 +400,8 @@ impl Parser<'_> {
         node: Node<'_, '_>,
         ph: &Placeholder,
     ) -> Result<Vec<Shape>, PptxError> {
-        let props = &ph.properties;
+        let effective = ph.properties.effective();
+        let props = &effective;
         if props.geometry_blocked {
             self.warn("unsupported inherited placeholder geometry: element omitted".into());
             return Ok(vec![]);

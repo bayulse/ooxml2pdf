@@ -106,11 +106,11 @@ pub(super) fn parse(
                         ],
                     );
                 }
-                if parser.single(bg, pml, "bgRef")?.is_some() {
-                    parser.warn(
-                        "bgRef: style-matrix background resolution deferred to Milestone 1I-C"
-                            .into(),
-                    );
+                if let Some(reference) = parser.single(bg, pml, "bgRef")? {
+                    let fill = parser.background_reference(reference)?;
+                    if parser.single(bg, pml, "bgPr")?.is_none() {
+                        slide.background = fill;
+                    }
                 }
                 parser.other_children(bg, &[(pml, "bgPr"), (pml, "bgRef")]);
             }
@@ -144,6 +144,7 @@ pub(super) fn parse(
                                         Ok(None) => {},
                                         Err(()) => parser.warn(format!("ambiguous placeholder {} idx {:?}: inheritance omitted", xml::expanded(None, &ph.kind), ph.idx)),
                                     }
+                                    ph.resolved_text = ph.properties.effective().text;
                                     if source.root == "sld" && !parser.hidden_shape(node)? {
                                         slide.shapes.extend(parser.placeholder_shapes(node, &ph)?);
                                     }
@@ -181,6 +182,35 @@ struct Parser<'a> {
 }
 
 impl Parser<'_> {
+    fn style_defaults(
+        &mut self,
+        node: Node<'_, '_>,
+    ) -> Result<Option<crate::styles::StyleDefaults>, PptxError> {
+        let pml_style = self.single(node, self.pml, "style")?;
+        let dml_style = self.single(node, self.dml, "style")?;
+        if pml_style.is_some() && dml_style.is_some() {
+            return Err(self.invalid("multiple shape styles"));
+        }
+        let Some(style) = pml_style.or(dml_style) else {
+            return Ok(None);
+        };
+        let mut context = crate::theme_xml::Context {
+            part: self.reference.part_name(),
+            slide_id: Some(self.reference.id()),
+            warnings: self.warnings,
+        };
+        crate::styles_xml::references(style, self.dml, self.theme, &mut context).map(Some)
+    }
+
+    fn background_reference(&mut self, node: Node<'_, '_>) -> Result<Option<Fill>, PptxError> {
+        let mut context = crate::theme_xml::Context {
+            part: self.reference.part_name(),
+            slide_id: Some(self.reference.id()),
+            warnings: self.warnings,
+        };
+        crate::styles_xml::fill_reference(node, self.dml, self.theme, &mut context)
+    }
+
     fn picture(&mut self, node: Node<'_, '_>) -> Result<Option<Shape>, PptxError> {
         let pml = self.pml;
         let dml = self.dml;
@@ -659,6 +689,7 @@ impl Parser<'_> {
         let pml = self.pml;
         let dml = self.dml;
         let text_body = self.single(node, pml, "txBody")?;
+        let references = self.style_defaults(node)?;
         // Placeholder geometry may be inherited; never guess it.
         let connector = node.has_tag_name((pml, "cxnSp"));
         let nonvisual_name = if connector { "nvCxnSpPr" } else { "nvSpPr" };
@@ -685,7 +716,13 @@ impl Parser<'_> {
         }
         self.other_children(
             node,
-            &[(pml, nonvisual_name), (pml, "spPr"), (pml, "txBody")],
+            &[
+                (pml, nonvisual_name),
+                (pml, "spPr"),
+                (pml, "txBody"),
+                (pml, "style"),
+                (dml, "style"),
+            ],
         );
         let Some(properties) = self.single(node, pml, "spPr")? else {
             self.warn("missing shape properties: shape omitted".into());
@@ -760,10 +797,26 @@ impl Parser<'_> {
                 self.fill(properties)?;
             }
             None
-        } else {
+        } else if self.has_fill(properties) || references.as_ref().is_none_or(|r| r.fill.is_none())
+        {
             self.fill(properties)?
+        } else {
+            references.as_ref().and_then(|r| r.fill.flatten())
         };
-        let stroke = if let Some(line) = self.single(properties, dml, "ln")? {
+        let stroke = if let Some(references) = &references {
+            let mut local = crate::inheritance::Properties {
+                references: references.clone(),
+                ..Default::default()
+            };
+            if let Some(line) = self.single(properties, dml, "ln")? {
+                self.line_properties(line, &mut local)?;
+            }
+            let effective = local.effective();
+            effective.line_color.flatten().and_then(|color| {
+                let width = effective.line_width.unwrap_or(0.75);
+                (width > 0.0).then_some(Stroke { color, width })
+            })
+        } else if let Some(line) = self.single(properties, dml, "ln")? {
             self.stroke(line)?
         } else {
             self.warn("inherited outline is not resolved".into());
@@ -786,17 +839,28 @@ impl Parser<'_> {
             _ => Shape::Rectangle { rect, fill, stroke },
         };
         let mut shapes = vec![];
-        if preset != "text" {
+        if preset != "text"
+            || (references.is_some() && (matches!(fill, Some(Fill::Solid(_))) || stroke.is_some()))
+        {
             shapes.push(shape);
         }
         if let Some(body) = text_body {
             if connector {
                 self.warn("connector text is not rendered".into());
-            } else if let Some(text) = self.text_box(body, rect, None)? {
-                if text.layout().1 {
-                    self.warn("legacy text box overflow: unwrapped text exceeds the inner box; configured-font overflow is reported after wrapping".into());
+            } else {
+                let defaults = if let Some(references) = &references {
+                    let mut direct = self.body_defaults(body, false)?;
+                    direct.inherit(&references.text);
+                    Some(direct)
+                } else {
+                    None
+                };
+                if let Some(text) = self.text_box(body, rect, defaults.as_ref())? {
+                    if text.layout().1 {
+                        self.warn("legacy text box overflow: unwrapped text exceeds the inner box; configured-font overflow is reported after wrapping".into());
+                    }
+                    shapes.push(Shape::TextBox(text));
                 }
-                shapes.push(Shape::TextBox(text));
             }
         }
         Ok(transformed(transform, shapes))

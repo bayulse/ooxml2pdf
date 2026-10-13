@@ -370,7 +370,7 @@ fn missing_theme_missing_slot_and_unsupported_aliases_warn_with_documented_fallb
 }
 
 #[test]
-fn unsupported_theme_definitions_transforms_and_style_matrix_are_structured_warnings() {
+fn unsupported_theme_definitions_and_transforms_are_structured_warnings() {
     for definition in [
         "<a:hslClr hue='0' sat='100000' lum='50000'/>",
         "<a:scrgbClr r='100000' g='0' b='0'/>",
@@ -396,7 +396,7 @@ fn unsupported_theme_definitions_transforms_and_style_matrix_are_structured_warn
         assert!(model.warnings().iter().any(|w| matches!(w, PptxWarning::UnsupportedSlideContent { name, .. } if name.contains(transform))));
     }
     let model = parse(&parts("theme-accent-fill.pptx")).unwrap();
-    assert!(model.warnings().iter().any(
+    assert!(!model.warnings().iter().any(
         |w| matches!(w, PptxWarning::UnsupportedTheme { name, .. } if name.contains("fmtScheme"))
     ));
 }

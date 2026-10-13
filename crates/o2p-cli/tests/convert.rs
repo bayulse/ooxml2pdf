@@ -53,6 +53,101 @@ fn assert_only_missing_layout_warning(stderr: &[u8]) {
 }
 
 #[test]
+fn style_matrix_cli_produces_deterministic_vector_paint_and_embedded_unicode() {
+    let directory = TestDirectory::new();
+    let destination = directory.0.join("style-matrix.pdf");
+    let run = |name: &str| {
+        Command::new(env!("CARGO_BIN_EXE_o2p"))
+            .arg("convert")
+            .arg(fixture(name))
+            .arg("--font-dir")
+            .arg(Path::new(env!("CARGO_MANIFEST_DIR")).join("../../fixtures/fonts"))
+            .arg("-o")
+            .arg(&destination)
+            .output()
+            .unwrap()
+    };
+    let output = run("style-matrix-demo.pptx");
+    assert!(
+        output.status.success(),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let warnings = String::from_utf8_lossy(&output.stderr);
+    assert!(
+        !warnings.contains("style-matrix")
+            && !warnings.contains("unresolved")
+            && !warnings.contains("MissingFont"),
+        "{warnings}"
+    );
+    let bytes = fs::read(&destination).unwrap();
+    assert!(run("style-matrix-demo.pptx").status.success());
+    assert_eq!(bytes, fs::read(&destination).unwrap());
+    assert!(bytes.windows(10).any(|w| w == b"/FontFile2"));
+    assert!(bytes.windows(10).any(|w| w == b"/ToUnicode"));
+    let pdf = lopdf::Document::load_mem(&bytes).unwrap();
+    assert_eq!(pdf.get_pages().len(), 1);
+    let text = pdf.extract_text(&[1]).unwrap();
+    for label in [
+        "DrawingML style matrix — Résumé",
+        "Theme fill",
+        "Theme line",
+        "Local override",
+    ] {
+        assert!(text.contains(label), "{text}");
+    }
+    let content =
+        lopdf::content::Content::decode(&pdf.get_page_content(pdf.get_pages()[&1]).unwrap())
+            .unwrap();
+    assert_eq!(
+        content
+            .operations
+            .iter()
+            .filter(|o| o.operator == "f")
+            .count(),
+        3
+    ); // background, referenced fill, local fill
+    assert_eq!(
+        content
+            .operations
+            .iter()
+            .filter(|o| o.operator == "S")
+            .count(),
+        3
+    );
+    assert!(
+        content
+            .operations
+            .iter()
+            .any(|o| o.operator == "w" && o.operands[0].as_float().unwrap() == 2.0)
+    );
+    assert!(
+        content
+            .operations
+            .iter()
+            .any(|o| o.operator == "w" && o.operands[0].as_float().unwrap() == 3.0)
+    );
+    for (name, warning) in [
+        ("unsupported-gradient-style-ref.pptx", "gradFill"),
+        ("malformed-style-index.pptx", "malformed/missing idx"),
+    ] {
+        let output = run(name);
+        assert!(output.status.success());
+        assert!(String::from_utf8_lossy(&output.stderr).contains(warning));
+        let pdf = lopdf::Document::load(&destination).unwrap();
+        let content =
+            lopdf::content::Content::decode(&pdf.get_page_content(pdf.get_pages()[&1]).unwrap())
+                .unwrap();
+        assert!(
+            !content
+                .operations
+                .iter()
+                .any(|o| matches!(o.operator.as_str(), "f" | "S"))
+        );
+    }
+}
+
+#[test]
 fn inheritance_cli_embeds_text_preserves_layers_and_fails_before_output_write() {
     let directory = TestDirectory::new();
     let destination = directory.0.join("inheritance.pdf");

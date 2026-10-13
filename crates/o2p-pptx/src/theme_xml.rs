@@ -5,7 +5,7 @@ use o2p_core::Color;
 use o2p_ooxml::{OoxmlPackage, RelationshipTarget};
 use roxmltree::Node;
 
-use crate::theme::{ColorTransform, transform_color};
+use crate::theme::{ColorBase, ColorTransformKind, ColorValue};
 use crate::{ParseLimits, PptxError, PptxWarning, Theme, ThemeColorSlot, ThemeFonts, xml};
 
 const DML: &str = "http://schemas.openxmlformats.org/drawingml/2006/main";
@@ -60,7 +60,7 @@ pub(crate) struct Context<'a> {
 }
 
 impl Context<'_> {
-    fn invalid(&self, message: impl Into<String>) -> PptxError {
+    pub(crate) fn invalid(&self, message: impl Into<String>) -> PptxError {
         if self.slide_id.is_some() {
             PptxError::InvalidSlide {
                 part: self.part.into(),
@@ -88,7 +88,7 @@ impl Context<'_> {
         });
     }
 
-    fn attributes(&mut self, node: Node<'_, '_>, known: &[&str]) {
+    pub(crate) fn attributes(&mut self, node: Node<'_, '_>, known: &[&str]) {
         for attr in node.attributes() {
             if attr.namespace().is_some() || !known.contains(&attr.name()) {
                 self.warn(format!(
@@ -100,7 +100,7 @@ impl Context<'_> {
         }
     }
 
-    fn element_only(&self, node: Node<'_, '_>) -> Result<(), PptxError> {
+    pub(crate) fn element_only(&self, node: Node<'_, '_>) -> Result<(), PptxError> {
         if node
             .children()
             .any(|n| n.is_text() && n.text().is_some_and(|s| !s.trim().is_empty()))
@@ -113,7 +113,7 @@ impl Context<'_> {
         Ok(())
     }
 
-    fn leaf(&self, node: Node<'_, '_>) -> Result<(), PptxError> {
+    pub(crate) fn leaf(&self, node: Node<'_, '_>) -> Result<(), PptxError> {
         self.element_only(node)?;
         if node.children().any(|n| n.is_element()) {
             return Err(self.invalid("unexpected nested content"));
@@ -121,7 +121,7 @@ impl Context<'_> {
         Ok(())
     }
 
-    fn single<'a, 'input>(
+    pub(crate) fn single<'a, 'input>(
         &self,
         parent: Node<'a, 'input>,
         ns: &str,
@@ -138,7 +138,7 @@ impl Context<'_> {
         Ok(first)
     }
 
-    fn other_children(&mut self, node: Node<'_, '_>, ns: &str, known: &[&str]) {
+    pub(crate) fn other_children(&mut self, node: Node<'_, '_>, ns: &str, known: &[&str]) {
         for child in node.children().filter(|n| n.is_element()) {
             if child.tag_name().namespace() != Some(ns) || !known.contains(&child.tag_name().name())
             {
@@ -150,7 +150,11 @@ impl Context<'_> {
         }
     }
 
-    fn string<'a, 'input>(&self, node: Node<'a, 'input>, name: &str) -> Result<&'a str, PptxError> {
+    pub(crate) fn string<'a, 'input>(
+        &self,
+        node: Node<'a, 'input>,
+        name: &str,
+    ) -> Result<&'a str, PptxError> {
         let value = node
             .attribute(name)
             .ok_or_else(|| self.invalid(format!("missing {name}")))?;
@@ -160,7 +164,7 @@ impl Context<'_> {
         Ok(value)
     }
 
-    fn hex(&self, raw: &str) -> Result<Color, PptxError> {
+    pub(crate) fn hex(&self, raw: &str) -> Result<Color, PptxError> {
         if raw.len() != 6 || !raw.bytes().all(|b| b.is_ascii_hexdigit()) {
             return Err(self.invalid("sRGB val/lastClr must be six hexadecimal digits"));
         }
@@ -178,8 +182,7 @@ fn parse(root: Node<'_, '_>, context: &mut Context<'_>) -> Result<Theme, PptxErr
     let elements = context.single(root, ns, "themeElements")?;
     context.attributes(elements, &[]);
     context.other_children(root, ns, &["themeElements"]);
-    // fmtScheme is intentionally opaque and warned about, even when unused.
-    context.other_children(elements, ns, &["clrScheme", "fontScheme"]);
+    context.other_children(elements, ns, &["clrScheme", "fontScheme", "fmtScheme"]);
     let colors = context.single(elements, ns, "clrScheme")?;
     context.attributes(colors, &["name"]);
     context.element_only(colors)?;
@@ -224,6 +227,13 @@ fn parse(root: Node<'_, '_>, context: &mut Context<'_>) -> Result<Theme, PptxErr
     context.other_children(fonts, ns, &["majorFont", "minorFont"]);
     theme.fonts.major = font_collection(context.single(fonts, ns, "majorFont")?, ns, context)?;
     theme.fonts.minor = font_collection(context.single(fonts, ns, "minorFont")?, ns, context)?;
+    if elements
+        .children()
+        .any(|n| n.has_tag_name((ns, "fmtScheme")))
+    {
+        theme.styles =
+            crate::styles_xml::matrix(context.single(elements, ns, "fmtScheme")?, ns, context)?;
+    }
     Ok(theme)
 }
 
@@ -272,45 +282,49 @@ fn font_collection(
     Ok(fonts)
 }
 
-/// Exactly one color element reaches this adapter from every supported paint.
-/// No master color maps, style-matrix references or recursive scheme definitions.
+/// One color adapter for direct paints, theme definitions and style entries.
 pub(crate) fn color(
     node: Node<'_, '_>,
     ns: &str,
     theme: Option<&Theme>,
     context: &mut Context<'_>,
 ) -> Result<Option<Color>, PptxError> {
+    let value = color_value(node, ns, context.slide_id.is_some(), context)?;
+    Ok(value.resolve(theme, None, context))
+}
+
+/// Normalize first; matrix colors need a reference's theme and phClr later.
+pub(crate) fn color_value(
+    node: Node<'_, '_>,
+    ns: &str,
+    allow_scheme: bool,
+    context: &mut Context<'_>,
+) -> Result<ColorValue, PptxError> {
     context.element_only(node)?;
-    let base = if node.has_tag_name((ns, "srgbClr")) {
+    let mut base = if node.has_tag_name((ns, "srgbClr")) {
         context.attributes(node, &["val"]);
-        Some(context.hex(context.string(node, "val")?)?)
+        ColorBase::Rgb(context.hex(context.string(node, "val")?)?)
     } else if node.has_tag_name((ns, "sysClr")) {
         context.attributes(node, &["val", "lastClr"]);
         context.string(node, "val")?;
         match node.attribute("lastClr") {
-            Some(raw) => Some(context.hex(raw)?),
+            Some(raw) => ColorBase::Rgb(context.hex(raw)?),
             None => {
                 context.warn("sysClr without lastClr: color unavailable (no system lookup)".into());
-                None
+                ColorBase::Unavailable
             }
         }
-    } else if node.has_tag_name((ns, "schemeClr")) && context.slide_id.is_some() {
+    } else if node.has_tag_name((ns, "schemeClr")) && allow_scheme {
         context.attributes(node, &["val"]);
-        let name = context.string(node, "val")?;
-        let resolved = theme.and_then(|theme| theme.resolve_color(name));
-        if resolved.is_none() {
-            context.warn(format!("schemeClr {}: theme color unavailable; paint omitted or paragraph/default text color retained", xml::expanded(None, name)));
-        }
-        resolved
+        ColorBase::Scheme(context.string(node, "val")?.into())
     } else {
         context.warn(format!(
             "{}: unsupported color representation; color unavailable",
             xml::expanded(node.tag_name().namespace(), node.tag_name().name())
         ));
-        None
+        ColorBase::Unavailable
     };
     let mut transforms = Vec::new();
-    let mut supported = true;
     for transform in node.children().filter(|n| n.is_element()) {
         let name = transform.tag_name().name();
         if transform.tag_name().namespace() != Some(ns)
@@ -320,7 +334,7 @@ pub(crate) fn color(
                 "{}: unsupported color transform; color unavailable",
                 xml::expanded(transform.tag_name().namespace(), name)
             ));
-            supported = false;
+            base = ColorBase::Unavailable;
             continue;
         }
         context.attributes(transform, &["val"]);
@@ -333,21 +347,23 @@ pub(crate) fn color(
         let value: i32 = raw
             .parse()
             .map_err(|_| context.invalid("overflowing color-transform percentage"))?;
-        if (name != "lumOff" && value < 0) || (matches!(name, "tint" | "shade") && value > 100_000)
+        if (matches!(name, "tint" | "shade") && !(0..=100_000).contains(&value))
+            || (name == "lumMod" && value < 0)
         {
             return Err(context.invalid("out-of-range color-transform percentage"));
         }
-        let value = f64::from(value) / 100_000.0;
-        transforms.push(match name {
-            "tint" => ColorTransform::Tint(value),
-            "shade" => ColorTransform::Shade(value),
-            "lumMod" => ColorTransform::LumMod(value),
-            _ => ColorTransform::LumOff(value),
-        });
+        transforms.push((
+            match name {
+                "tint" => ColorTransformKind::Tint,
+                "shade" => ColorTransformKind::Shade,
+                "lumMod" => ColorTransformKind::LumMod,
+                "lumOff" => ColorTransformKind::LumOff,
+                _ => unreachable!(),
+            },
+            value,
+        ));
     }
-    Ok(base
-        .filter(|_| supported)
-        .map(|color| transform_color(color, &transforms)))
+    Ok(ColorValue { base, transforms })
 }
 
 pub(crate) fn font(
