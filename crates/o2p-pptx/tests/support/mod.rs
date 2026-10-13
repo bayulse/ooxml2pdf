@@ -102,9 +102,12 @@ pub const DML: &str = "http://schemas.openxmlformats.org/drawingml/2006/main";
 mod themes;
 #[allow(unused_imports)]
 pub use themes::*;
+mod fidelity2a;
 #[path = "inheritance.rs"]
 mod inheritance;
 mod styles;
+#[allow(unused_imports)]
+pub use fidelity2a::*;
 #[allow(unused_imports)]
 pub use inheritance::*;
 #[allow(unused_imports)]

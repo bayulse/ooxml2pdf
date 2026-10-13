@@ -4,6 +4,10 @@
 //! backgrounds, rectangles, ellipses, straight lines, embedded raster pictures and basic text.
 //! No PDF commands or external loading occur.
 
+mod color_map;
+pub use color_map::ColorMap;
+mod text_defaults;
+pub use text_defaults::{MasterTextStyles, TextListStyle};
 mod font_layout;
 mod inheritance;
 mod model;

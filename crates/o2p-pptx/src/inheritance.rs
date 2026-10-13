@@ -89,7 +89,8 @@ pub(crate) struct Properties {
     pub fill: Option<Option<Fill>>,
     pub line_width: Option<f32>,
     pub line_color: Option<Option<Color>>,
-    pub text: PlaceholderTextDefaults,
+    pub text_levels: crate::TextListStyle,
+    pub insets: crate::text_defaults::InsetDefaults,
     pub references: crate::styles::StyleDefaults,
 }
 impl Properties {
@@ -104,7 +105,8 @@ impl Properties {
         self.fill = self.fill.or(parent.fill);
         self.line_width = self.line_width.or(parent.line_width);
         self.line_color = self.line_color.or(parent.line_color);
-        self.text.inherit(&parent.text);
+        self.text_levels.inherit(&parent.text_levels);
+        self.insets.inherit(&parent.insets);
         self.references.inherit(&parent.references);
     }
 
@@ -113,7 +115,9 @@ impl Properties {
         effective.fill = effective.fill.or(self.references.fill);
         effective.line_width = effective.line_width.or(self.references.line_width);
         effective.line_color = effective.line_color.or(self.references.line_color);
-        effective.text.inherit(&self.references.text);
+        for level in &mut effective.text_levels.levels {
+            level.inherit(&self.references.text);
+        }
         effective
     }
 }
@@ -149,6 +153,9 @@ pub struct SlideLayout {
     pub(crate) theme: Option<crate::Theme>,
 }
 impl SlideLayout {
+    pub fn color_map(&self) -> &crate::ColorMap {
+        &self.source.color_map
+    }
     pub fn part_name(&self) -> &str {
         &self.part
     }
@@ -175,6 +182,12 @@ pub struct SlideMaster {
     pub(crate) theme: Option<crate::Theme>,
 }
 impl SlideMaster {
+    pub fn color_map(&self) -> &crate::ColorMap {
+        &self.source.color_map
+    }
+    pub fn text_styles(&self) -> &crate::MasterTextStyles {
+        &self.source.text_styles
+    }
     pub fn part_name(&self) -> &str {
         &self.part
     }
@@ -193,6 +206,8 @@ impl SlideMaster {
 }
 #[derive(Debug, Clone, PartialEq)]
 pub(crate) struct Source {
+    pub color_map: crate::ColorMap,
+    pub text_styles: crate::MasterTextStyles,
     pub slide: crate::Slide,
     pub placeholders: Vec<Placeholder>,
     pub background_present: bool,
@@ -294,6 +309,7 @@ pub(crate) struct Reader<'a> {
     warnings: &'a mut Vec<PptxWarning>,
     fallback_theme: Option<&'a crate::Theme>,
     images: std::collections::BTreeMap<String, std::sync::Arc<o2p_core::ImageResource>>,
+    source_warning_keys: std::collections::BTreeSet<(String, String)>,
     pub layouts: std::collections::BTreeMap<String, SlideLayout>,
     pub masters: std::collections::BTreeMap<String, SlideMaster>,
 }
@@ -310,6 +326,7 @@ impl<'a> Reader<'a> {
             warnings,
             fallback_theme,
             images: Default::default(),
+            source_warning_keys: Default::default(),
             layouts: Default::default(),
             masters: Default::default(),
         }
@@ -320,7 +337,9 @@ impl<'a> Reader<'a> {
         root: &str,
         parents: &[Placeholder],
         theme: Option<&crate::Theme>,
+        scope: &crate::slide::SemanticScope,
     ) -> Result<Source, PptxError> {
+        let warning_start = self.warnings.len();
         let source = crate::slide::parse(
             self.package,
             &mut self.images,
@@ -329,6 +348,7 @@ impl<'a> Reader<'a> {
             self.limits,
             self.warnings,
             crate::slide::ParseSource {
+                scope,
                 root,
                 parents,
                 master_matching: root == "sldLayout",
@@ -353,6 +373,21 @@ impl<'a> Reader<'a> {
                     crate::xml::expanded(None, &relation.relationship_type)
                 ),
             });
+        }
+        if root != "sld" {
+            let diagnostics = self.warnings.split_off(warning_start);
+            for warning in diagnostics {
+                let new = if let PptxWarning::UnsupportedSlideContent { part, name, .. } = &warning
+                {
+                    self.source_warning_keys
+                        .insert((part.clone(), name.clone()))
+                } else {
+                    true
+                };
+                if scope.forced_map.is_none() || new {
+                    self.warnings.push(warning);
+                }
+            }
         }
         Ok(source)
     }
@@ -387,7 +422,13 @@ impl<'a> Reader<'a> {
                             id: reference.id(),
                             part_name: master.clone(),
                         };
-                        let source = self.source(&master_ref, "sldMaster", &[], theme.as_ref())?;
+                        let source = self.source(
+                            &master_ref,
+                            "sldMaster",
+                            &[],
+                            theme.as_ref(),
+                            &crate::slide::SemanticScope::default(),
+                        )?;
                         self.masters.insert(
                             master.clone(),
                             SlideMaster {
@@ -398,18 +439,65 @@ impl<'a> Reader<'a> {
                         );
                     }
                 }
-                let master = master_part.as_ref().and_then(|p| self.masters.get(p));
-                let parents = master
-                    .map(|m| m.source.placeholders.clone())
-                    .unwrap_or_default();
+                let master = master_part
+                    .as_ref()
+                    .and_then(|p| self.masters.get(p))
+                    .cloned();
                 let theme = crate::theme_xml::load(self.package, part, self.limits, self.warnings)?
-                    .or_else(|| master.and_then(|m| m.theme.clone()))
+                    .or_else(|| master.as_ref().and_then(|m| m.theme.clone()))
                     .or_else(|| self.fallback_theme.cloned());
+                let master_map = master
+                    .as_ref()
+                    .map(|m| m.source.color_map.clone())
+                    .unwrap_or_default();
+                let mut probe_warnings = vec![];
+                let layout_map = crate::color_map::load(
+                    self.package.part(part)?.bytes(),
+                    part,
+                    reference.id(),
+                    self.limits,
+                    &master_map,
+                    &master_map,
+                    &mut probe_warnings,
+                )?;
+                let mut donor = master.as_ref().map(|m| m.source.clone());
+                if let Some(master) = &master {
+                    if master.source.color_map != layout_map || master.theme != theme {
+                        let scope = crate::slide::SemanticScope {
+                            forced_map: Some(layout_map.clone()),
+                            ..Default::default()
+                        };
+                        donor = Some(self.source(
+                            &crate::SlideRef {
+                                id: reference.id(),
+                                part_name: master.part.clone(),
+                            },
+                            "sldMaster",
+                            &[],
+                            theme.as_ref(),
+                            &scope,
+                        )?);
+                    }
+                }
+                let parents = donor
+                    .as_ref()
+                    .map(|m| m.placeholders.as_slice())
+                    .unwrap_or(&[]);
+                let scope = crate::slide::SemanticScope {
+                    master_map: master_map.clone(),
+                    parent_map: master_map,
+                    text_styles: donor
+                        .as_ref()
+                        .map(|m| m.text_styles.clone())
+                        .unwrap_or_default(),
+                    forced_map: None,
+                };
                 let layout_ref = crate::SlideRef {
                     id: reference.id(),
                     part_name: part.clone(),
                 };
-                let source = self.source(&layout_ref, "sldLayout", &parents, theme.as_ref())?;
+                let source =
+                    self.source(&layout_ref, "sldLayout", parents, theme.as_ref(), &scope)?;
                 self.layouts.insert(
                     part.clone(),
                     SlideLayout {
@@ -421,34 +509,118 @@ impl<'a> Reader<'a> {
                 );
             }
         }
-        let layout = layout_part.as_ref().and_then(|p| self.layouts.get(p));
-        let parents = layout
-            .map(|l| l.source.placeholders.clone())
-            .unwrap_or_default();
+        // Cached sources retain their own maps. Re-evaluate affected ancestor
+        // paints in the consuming slide's map/theme without mutating the cache.
+        let layout = layout_part
+            .as_ref()
+            .and_then(|p| self.layouts.get(p))
+            .cloned();
+        let master = layout
+            .as_ref()
+            .and_then(|l| l.master_part.as_ref())
+            .and_then(|p| self.masters.get(p))
+            .cloned();
         let theme = layout
+            .as_ref()
             .and_then(|l| l.theme.clone())
             .or_else(|| self.fallback_theme.cloned());
-        let mut local = self.source(reference, "sld", &parents, theme.as_ref())?;
+        let master_map = master
+            .as_ref()
+            .map(|m| m.source.color_map.clone())
+            .unwrap_or_default();
+        let parent_map = layout
+            .as_ref()
+            .map(|l| l.source.color_map.clone())
+            .unwrap_or_default();
+        // This bounded metadata probe chooses the paint scope. The full slide
+        // parse below emits the same mapping diagnostics once.
+        let mut map_warnings = vec![];
+        let effective_map = crate::color_map::load(
+            self.package.part(reference.part_name())?.bytes(),
+            reference.part_name(),
+            reference.id(),
+            self.limits,
+            &master_map,
+            &parent_map,
+            &mut map_warnings,
+        )?;
+        let mut master_source = master.as_ref().map(|m| m.source.clone());
+        let mut layout_source = layout.as_ref().map(|l| l.source.clone());
+        if let Some(master) = &master {
+            if master.source.color_map != effective_map || master.theme != theme {
+                let scope = crate::slide::SemanticScope {
+                    forced_map: Some(effective_map.clone()),
+                    ..Default::default()
+                };
+                master_source = Some(self.source(
+                    &crate::SlideRef {
+                        id: reference.id(),
+                        part_name: master.part.clone(),
+                    },
+                    "sldMaster",
+                    &[],
+                    theme.as_ref(),
+                    &scope,
+                )?);
+            }
+        }
+        let text_styles = master_source
+            .as_ref()
+            .map(|m| m.text_styles.clone())
+            .unwrap_or_default();
+        if let Some(layout) = &layout {
+            if layout.source.color_map != effective_map
+                || master_source.as_ref() != master.as_ref().map(|m| &m.source)
+            {
+                let scope = crate::slide::SemanticScope {
+                    master_map: master_map.clone(),
+                    parent_map: master_map.clone(),
+                    forced_map: Some(effective_map.clone()),
+                    text_styles: text_styles.clone(),
+                };
+                let parents = master_source
+                    .as_ref()
+                    .map(|m| m.placeholders.as_slice())
+                    .unwrap_or(&[]);
+                layout_source = Some(self.source(
+                    &crate::SlideRef {
+                        id: reference.id(),
+                        part_name: layout.part.clone(),
+                    },
+                    "sldLayout",
+                    parents,
+                    theme.as_ref(),
+                    &scope,
+                )?);
+            }
+        }
+        let parents = layout_source
+            .as_ref()
+            .map(|l| l.placeholders.as_slice())
+            .unwrap_or(&[]);
+        let scope = crate::slide::SemanticScope {
+            master_map,
+            parent_map,
+            forced_map: None,
+            text_styles,
+        };
+        let mut local = self.source(reference, "sld", parents, theme.as_ref(), &scope)?;
         self.warnings.extend(missing_link_warnings);
-        let layout = layout_part.as_ref().and_then(|p| self.layouts.get(p));
-        let master = layout
-            .and_then(|l| l.master_part.as_ref())
-            .and_then(|p| self.masters.get(p));
         if !local.background_present {
-            if let Some(layout) = layout.filter(|l| l.source.background_present) {
-                local.slide.background = layout.source.slide.background;
-            } else if let Some(master) = master {
-                local.slide.background = master.source.slide.background;
+            if let Some(layout) = layout_source.as_ref().filter(|l| l.background_present) {
+                local.slide.background = layout.slide.background;
+            } else if let Some(master) = &master_source {
+                local.slide.background = master.slide.background;
             }
         }
         let mut shapes = vec![];
-        if local.show_master_shapes && layout.is_none_or(|l| l.source.show_master_shapes) {
-            if let Some(master) = master {
-                shapes.extend(master.source.slide.shapes.iter().cloned());
+        if local.show_master_shapes && layout_source.as_ref().is_none_or(|l| l.show_master_shapes) {
+            if let Some(master) = &master_source {
+                shapes.extend(master.slide.shapes.iter().cloned());
             }
         }
-        if let Some(layout) = layout {
-            shapes.extend(layout.source.slide.shapes.iter().cloned());
+        if let Some(layout) = &layout_source {
+            shapes.extend(layout.slide.shapes.iter().cloned());
         }
         shapes.append(&mut local.slide.shapes);
         local.slide.shapes = shapes;

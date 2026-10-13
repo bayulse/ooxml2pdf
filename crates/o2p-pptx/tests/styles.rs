@@ -96,7 +96,7 @@ fn fmt_scheme_is_owned_and_fixtures_are_reproducible_and_renderable() {
             "unsupported-gradient-style-ref.pptx" | "malformed-style-index.pptx"
         ) {
             assert!(
-                model.warnings().iter().all(|w| matches!(w, PptxWarning::UnsupportedSlideContent { name, .. } if name.starts_with("legacy text box overflow:"))),
+                model.warnings().iter().all(|w| matches!(w, PptxWarning::UnsupportedSlideContent { name, .. } if name.starts_with("legacy text box overflow:") || name.starts_with("text inheritance/font resolution:"))),
                 "{name}: {:?}",
                 model.warnings()
             );
@@ -204,7 +204,8 @@ fn source_scoped_theme_matrix_and_font_refs_survive_master_layout_traversal() {
             .as_deref(),
         Some("O2P Test Sans")
     );
-    assert!(model.warnings().is_empty());
+    assert!(model.warnings().iter().all(|w| matches!(w, PptxWarning::UnsupportedSlideContent { name, .. } if name.starts_with("text inheritance/font resolution:"))));
+    assert_eq!(texts(&model)[0].paragraphs[0].runs[0].style.font_size, 18.0);
 }
 
 #[test]
@@ -476,7 +477,7 @@ fn rectangles_ellipses_lines_and_text_shapes_use_existing_display_ops() {
         )
     );
     let model = parse(&style_deck("", &shapes)).unwrap();
-    assert!(model.warnings().is_empty(), "{:?}", model.warnings());
+    assert!(model.warnings().iter().all(|w| matches!(w, PptxWarning::UnsupportedSlideContent { name, .. } if name.starts_with("text inheritance/font resolution:"))), "{:?}", model.warnings());
     assert!(matches!(
         model.to_display_list().pages[0].ops.as_slice(),
         [

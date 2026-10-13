@@ -20,6 +20,7 @@ fn main() -> std::io::Result<()> {
         .chain(support::theme_fixtures())
         .chain(support::inheritance_fixtures())
         .chain(support::style_fixtures())
+        .chain(support::fidelity2a_fixtures())
     {
         fs::write(directory.join(name), support::zip(&parts, true, false))?;
     }

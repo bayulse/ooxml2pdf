@@ -265,3 +265,20 @@ Twelve original synthetic packages extend the deterministic fixture generator:
 
 Regenerate with `cargo run --offline -p o2p-pptx --example generate_fixtures`.
 See [STYLES.md](../../docs/STYLES.md) for supported styles, indexing and fallbacks.
+
+## Fidelity 2A fixtures
+
+Ten text fixtures cover master-title-style, master-body-style, master-other-style,
+inherited-font-size, inherited-font-family, inherited-bold-italic,
+inherited-text-color, paragraph-level-style, local-text-override, and
+layout-placeholder-text-override. Nine color fixtures cover master-clrmap,
+layout-master-clr-mapping, layout-override-clr-mapping, slide-master-clr-mapping,
+slide-override-clr-mapping, clrmap-text, clrmap-fill, clrmap-line, and
+clrmap-style-matrix. All have the `.pptx` extension and original synthetic content.
+The property fixtures vary the property source; the color fixtures also share a
+combined text/direct-paint/reference composition to verify consistent mapping.
+
+Regenerate with the existing o2p-pptx `generate_fixtures` example. They do not
+contain PowerPoint exports or reference images. Tests independently inspect
+effective models, map scope, PDF text/mappings, malformed warnings, and stable
+fixture/PDF bytes. See [INHERITANCE.md](../../docs/INHERITANCE.md).

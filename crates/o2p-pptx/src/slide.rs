@@ -29,7 +29,16 @@ pub(super) fn is_image_relationship(kind: &str) -> bool {
     )
 }
 
+#[derive(Default)]
+pub(super) struct SemanticScope {
+    pub master_map: crate::ColorMap,
+    pub parent_map: crate::ColorMap,
+    pub forced_map: Option<crate::ColorMap>,
+    pub text_styles: crate::MasterTextStyles,
+}
+
 pub(super) struct ParseSource<'a> {
+    pub scope: &'a SemanticScope,
     pub root: &'a str,
     pub parents: &'a [Placeholder],
     pub master_matching: bool,
@@ -54,7 +63,20 @@ pub(super) fn parse(
                 message: format!("expected PresentationML {} root", source.root),
             });
         }
+        let color_map = crate::color_map::effective(
+            root,
+            &source.scope.master_map,
+            &source.scope.parent_map,
+            &mut crate::theme_xml::Context {
+                part: reference.part_name(),
+                slide_id: Some(reference.id()),
+                warnings,
+                color_map: None,
+            },
+        )?;
         let mut parser = Parser {
+            color_map: source.scope.forced_map.clone().unwrap_or(color_map),
+            text_styles: source.scope.text_styles.clone(),
             package,
             images,
             reference,
@@ -63,6 +85,9 @@ pub(super) fn parse(
             pml,
             dml: if pml == PML { DML } else { STRICT_DML },
         };
+        if source.root == "sldMaster" {
+            parser.text_styles = parser.master_text_styles(root)?;
+        }
         let mut slide = Slide {
             background: None,
             shapes: vec![],
@@ -144,7 +169,9 @@ pub(super) fn parse(
                                         Ok(None) => {},
                                         Err(()) => parser.warn(format!("ambiguous placeholder {} idx {:?}: inheritance omitted", xml::expanded(None, &ph.kind), ph.idx)),
                                     }
-                                    ph.resolved_text = ph.properties.effective().text;
+                                    let mut resolved = ph.properties.effective().text_levels;
+                                    resolved.inherit(parser.text_styles.for_kind(&ph.kind));
+                                    ph.resolved_text = resolved.levels[0].clone();
                                     if source.root == "sld" && !parser.hidden_shape(node)? {
                                         slide.shapes.extend(parser.placeholder_shapes(node, &ph)?);
                                     }
@@ -161,8 +188,15 @@ pub(super) fn parse(
             }
             parser.other_children(common, &[(pml, "bg"), (pml, "spTree")]);
         }
-        parser.other_children(root, &[(pml, "cSld")]);
+        let known = if source.root == "sldMaster" {
+            vec![(pml, "cSld"), (pml, "clrMap"), (pml, "txStyles")]
+        } else {
+            vec![(pml, "cSld"), (pml, "clrMapOvr")]
+        };
+        parser.other_children(root, &known);
         Ok(Source {
+            color_map: parser.color_map,
+            text_styles: parser.text_styles,
             slide,
             placeholders,
             background_present,
@@ -172,6 +206,8 @@ pub(super) fn parse(
 }
 
 struct Parser<'a> {
+    color_map: crate::ColorMap,
+    text_styles: crate::MasterTextStyles,
     package: &'a OoxmlPackage,
     images: &'a mut BTreeMap<String, Arc<ImageResource>>,
     reference: &'a SlideRef,
@@ -195,6 +231,7 @@ impl Parser<'_> {
             return Ok(None);
         };
         let mut context = crate::theme_xml::Context {
+            color_map: Some(&self.color_map),
             part: self.reference.part_name(),
             slide_id: Some(self.reference.id()),
             warnings: self.warnings,
@@ -204,6 +241,7 @@ impl Parser<'_> {
 
     fn background_reference(&mut self, node: Node<'_, '_>) -> Result<Option<Fill>, PptxError> {
         let mut context = crate::theme_xml::Context {
+            color_map: Some(&self.color_map),
             part: self.reference.part_name(),
             slide_id: Some(self.reference.id()),
             warnings: self.warnings,
@@ -670,6 +708,7 @@ impl Parser<'_> {
                     return Err(self.invalid("solidFill has multiple colors"));
                 }
                 let mut context = crate::theme_xml::Context {
+                    color_map: Some(&self.color_map),
                     part: self.reference.part_name(),
                     slide_id: Some(self.reference.id()),
                     warnings: self.warnings,
@@ -848,13 +887,16 @@ impl Parser<'_> {
             if connector {
                 self.warn("connector text is not rendered".into());
             } else {
-                let defaults = if let Some(references) = &references {
-                    let mut direct = self.body_defaults(body, false)?;
-                    direct.inherit(&references.text);
-                    Some(direct)
-                } else {
-                    None
-                };
+                let mut defaults = references.as_ref().map(|references| {
+                    crate::inheritance::Properties {
+                        references: references.clone(),
+                        ..Default::default()
+                    }
+                    .effective()
+                });
+                if let Some(defaults) = &mut defaults {
+                    defaults.text_levels.inherit(&self.text_styles.other);
+                }
                 if let Some(text) = self.text_box(body, rect, defaults.as_ref())? {
                     if text.layout().1 {
                         self.warn("legacy text box overflow: unwrapped text exceeds the inner box; configured-font overflow is reported after wrapping".into());

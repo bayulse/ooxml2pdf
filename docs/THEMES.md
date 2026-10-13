@@ -1,4 +1,4 @@
-# PPTX themes and fidelity — Milestones 1I-A / 1I-B / 1I-C
+# PPTX themes and fidelity — through Fidelity 2A
 
 Baseline: `f392e61`. This milestone resolves directly referenced theme colors and
 explicit Latin theme font tokens. Theme semantics live entirely in `o2p-pptx`.
@@ -72,10 +72,10 @@ invented Office palette. Every unresolved slide reference produces a
 slide-scoped `UnsupportedSlideContent` warning describing the fallback.
 Explicit font/color values continue to override local defaults.
 
-`bg1`, `bg2`, `tx1` and `tx2` require color-map semantics and remain unresolved.
-`phClr` is supported inside style-matrix entries through reference-color
-substitution; outside that context it warns and remains unavailable. This milestone does not infer the usual dk/lt mapping
-or reinterpret a master color map.
+`bg1`, `bg2`, `tx1`, `tx2`, accents, and hyperlink tokens now resolve through
+an effective `ColorMap` before looking up the concrete theme slot. See the
+Fidelity 2A section below. `phClr` retains style-reference substitution semantics.
+No Office palette or hardcoded dark/light RGB is introduced.
 
 ## Conservative color transforms
 
@@ -132,7 +132,7 @@ Basic master/layout/placeholder geometry, paint, text defaults and backgrounds
 are supported by 1I-B; see [INHERITANCE.md](INHERITANCE.md) for precedence and limits.
 Milestone 1I-C resolves solid/no-fill format-matrix fills, lines and backgrounds,
 and conservative fontRef defaults. See [STYLES.md](STYLES.md) for indexing,
-precedence, phClr, warnings and fallbacks. Full txStyles, theme overrides, effect
+precedence, phClr, warnings and fallbacks. Typography beyond the supported Fidelity 2A txStyles subset, theme overrides, effect
 styles, grouped shapes, charts, SmartArt and animations remain unsupported.
 Unsupported theme subtrees warn at their boundary. DOCX, XLSX and Flutter stay
 outside scope. Existing shape/image/text z-order, wrapping, transforms, Unicode,
@@ -161,3 +161,62 @@ reference color are known. Direct/inherited placeholder formatting has priority
 over references; reference defaults precede generic fallback. `fontRef major`
 and `minor` use the existing Latin family resolver. No generic rendering or
 font-library dependencies change. See [STYLES.md](STYLES.md).
+
+## Fidelity 2A — effective color-map semantics
+
+Baseline: `d1a27f6`. `ColorMap` is an owned PresentationML indirection layer,
+separate from `Theme::colors`. It maps bg1, tx1, bg2, tx2, accent1..accent6,
+hlink, and folHlink to `ThemeColorSlot` values. Master `p:clrMap` and layout/slide
+`p:clrMapOvr` are supported. The underlying ColorScheme is never rewritten.
+For example, tx1 may map to lt1; lt1's RGB still comes from the selected theme.
+Concrete dk1/lt1/dk2/lt2 references bypass semantic aliases. Accent and hyperlink
+references participate in mapping; values are looked up once, not recursively
+remapped through another token.
+
+Effective map selection follows the ancestry:
+
+| Source declaration | Effective map |
+| --- | --- |
+| Master clrMap | Master's declared mapping |
+| Layout without clrMapOvr | Master map |
+| Layout masterClrMapping | Master map |
+| Layout overrideClrMapping | Complete layout override |
+| Slide without clrMapOvr | Effective layout map |
+| Slide masterClrMapping | Master map, even if layout overrides it |
+| Slide overrideClrMapping | Complete slide override |
+
+An override is a replacement map, not a partial merge with an ancestor.
+Invalid/missing attributes in an explicit mapping produce structured warnings
+and leave those tokens unavailable. Unknown/multiple override children warn
+and make the semantic mapping unavailable; duplicate mapping nodes are errors.
+Absent master clrMap preserves the previous concrete-slot behavior but does not
+invent bg/tx alias mappings. All source XML uses the existing byte/node/depth
+limits, including bounded probes and scope re-evaluation.
+
+`ColorValue::resolve` uses the contextual map in the shared theme/color adapter.
+This covers text, fills, outlines/lines, direct backgrounds, fillRef/lnRef/bgRef,
+fontRef colors, and scheme expressions inside the style matrix. Matrix phClr
+substitution and color-transform order remain unchanged. Mapping precedes
+lookup, which precedes transforms. Direct sRGB/system lastClr bypass mapping.
+No separate color resolver is added to a rendering feature.
+
+Cached master/layout paints and text defaults are re-evaluated in a consuming
+slide's map/theme when their existing concrete values would have the wrong
+scope. Source getters retain source-scoped values, shared caches are immutable
+under slide overrides, and theme definitions remain independent. Generic layout,
+font substitution/shaping, DisplayList, and PDF rendering receive resolved values
+and know nothing about PresentationML maps.
+
+Master title/body/other text styles, all nine paragraph levels, Latin major/minor
+references, and independently inherited properties are described in
+[INHERITANCE.md](INHERITANCE.md). Theme overrides and script-specific font
+selection remain unsupported. Color mapping does not enable gradients, effects,
+groups, charts, SmartArt, or other excluded features.
+
+The nine color-map fixtures cover master maps, layout/slide master selection and
+overrides, text/fill/line/style references. Tests additionally cover malformed
+mapping, mapped inherited background/decorations/default text, matrix-entry
+scheme colors, Strict namespaces, and non-mutation of theme RGB definitions.
+
+See [Microsoft's clrMapOvr semantics](https://learn.microsoft.com/en-us/office/open-xml/presentation/working-with-slide-masters)
+and the [Fidelity 2A compatibility results](../compat/reports/FIDELITY_2A.md).

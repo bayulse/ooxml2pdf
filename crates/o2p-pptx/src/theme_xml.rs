@@ -32,6 +32,7 @@ pub(crate) fn load(
         return Ok(None);
     };
     let mut context = Context {
+        color_map: None,
         part: presentation,
         slide_id: None,
         warnings,
@@ -54,6 +55,7 @@ pub(crate) fn load(
 }
 
 pub(crate) struct Context<'a> {
+    pub color_map: Option<&'a crate::ColorMap>,
     pub part: &'a str,
     pub slide_id: Option<u32>,
     pub warnings: &'a mut Vec<PptxWarning>,

@@ -516,17 +516,16 @@ fn conversion_preserves_deterministic_blank_pages_with_correct_dimensions() {
         );
         assert!(String::from_utf8_lossy(&output.stdout).contains(&format!("{count} pages")));
         let warnings = String::from_utf8(output.stderr).unwrap();
-        {
-            assert_eq!(warnings.matches("clrMapOvr").count(), count);
-            if name == "reordered-slides.pptx" {
-                let order: Vec<_> = warnings
-                    .lines()
-                    .filter(|line| line.contains("clrMapOvr"))
-                    .collect();
-                assert!(order[0].contains("slide3.xml"));
-                assert!(order[1].contains("slide1.xml"));
-                assert!(order[2].contains("slide2.xml"));
-            }
+        assert!(!warnings.contains("clrMapOvr"), "{warnings}");
+        if name == "reordered-slides.pptx" {
+            let order: Vec<_> = warnings
+                .lines()
+                .filter(|line| line.contains("missing slideLayout relationship"))
+                .collect();
+            assert_eq!(order.len(), 3);
+            assert!(order[0].contains("slide3.xml"));
+            assert!(order[1].contains("slide1.xml"));
+            assert!(order[2].contains("slide2.xml"));
         }
         let bytes = fs::read(&destination).unwrap();
         let pdf = lopdf::Document::load_mem(&bytes).unwrap();

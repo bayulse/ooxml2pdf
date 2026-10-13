@@ -1,7 +1,7 @@
 This document records completed milestones chronologically. Milestone 1G-B
 describes the current configured-font layout path and the final Milestone 1H
 section adds individual element transforms. Milestone 1I-A below adds explicit
-theme resolution; Milestone 1I-B adds structural inheritance; 1I-C adds DrawingML format styles. Earlier standard-font descriptions
+theme resolution; Milestone 1I-B adds structural inheritance; 1I-C adds DrawingML format styles. Fidelity 2A adds per-property text inheritance and effective color maps. Earlier standard-font descriptions
 remain the compatibility-path history.
 
 # Milestone 0: Common DisplayList to PDF
@@ -1198,3 +1198,55 @@ continues to follow 1I-B. Unsupported styles warn and omit affected paint rather
 than being approximated. Effect styles, gradients, patterns, decorations and
 PowerPoint text hierarchy remain deferred. See [STYLES.md](STYLES.md) for the
 model, exact indexing, precedence, warnings, fallbacks and validation fixtures.
+
+# Fidelity 2A — Text inheritance and color-map semantics
+
+Baseline: clean committed `d1a27f6`; no dependency changes. All implementation
+remains in `o2p-pptx`. The existing pipeline and generic rendering contracts stay
+intact. No PDF commands are emitted by the parser, and no Office semantics enter
+the font, layout, or PDF crates.
+
+The parser now owns `TextListStyle` (nine sparse paragraph levels),
+`MasterTextStyles` (title/body/other), and `ColorMap` (semantic token-to-theme-slot
+indirection). Existing `PlaceholderTextDefaults` properties retain individual
+presence and explicit-false/unavailable behavior. Placeholder body insets are
+sparse and independent. Normalized TextBox/Paragraph/TextStyle receive concrete
+effective properties. Public source getters expose master text styles and source
+color maps without exposing XML nodes or third-party types.
+
+Master p:txStyles and list defPPr/lvl1pPr..lvl9pPr/defRPr supply defaults selected
+by paragraph level and text role. Local runs/paragraphs/lists precede matching
+layout/master defaults; direct formatting precedes separately inherited font
+references and applicable master text styles. Latin major/minor aliases resolve
+to generic family requests. Fallback diagnostics now identify actual unresolved
+family/size/color after effective resolution. Schema/default regular/left/top
+behavior is explicit. See [INHERITANCE.md](INHERITANCE.md) for exact precedence,
+ancestor paragraph handling, default insets, end styles, and unsupported typography.
+
+Master clrMap, layout override, and slide override determine the effective map.
+Explicit masterClrMapping selects the master, including after a layout override.
+All contextual scheme resolution goes through ColorValue and the shared theme
+adapter: text, fills, lines, backgrounds, references, and matrix entry expressions.
+RGB theme definitions and mapping remain separate. See [THEMES.md](THEMES.md).
+
+Cached ancestors previously contained eager concrete colors/families. To make
+slide/layout overrides affect inherited paints correctly without a broad model
+rewrite, affected sources are re-evaluated through the same bounded parser in
+the consumer's map/theme scope. This also gives cached layouts correct source
+scope when their own override/theme differs from the master. Master caches are
+not mutated; raster resources remain shared; fixed-depth traversal and XML
+security limits are preserved. Re-evaluation diagnostics are deduplicated by
+source part/feature using an ordered set. A bounded metadata probe chooses the
+scope; the full source parse emits its mapping diagnostics.
+
+The generic font/Unicode shaping/wrapping path, selectable/searchable text,
+ToUnicode/ActualText, font embedding, images, and element rotation/flipping are
+unchanged and covered by existing regressions. Nineteen reproducible fixtures
+and focused semantic/PDF tests cover the added behavior. No shadows, gradients,
+groups, charts, SmartArt, rounded rectangles, connectors/arrows, animations,
+DOCX/XLSX, or Flutter features are added.
+
+Public-corpus metrics remain unchanged: all six cases are MAJOR_DIFFERENCE.
+Warnings decrease from 93 to 20; this is not evidence of an image fidelity gain.
+Full before/after measurements are in
+[compat/reports/FIDELITY_2A.md](../compat/reports/FIDELITY_2A.md).

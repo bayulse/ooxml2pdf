@@ -205,12 +205,12 @@ impl Parser<'_> {
             }
         }
         if let Some(body) = self.single(node, self.pml, "txBody")? {
-            properties.text = self.body_defaults(body, ancestor)?;
+            (properties.text_levels, properties.insets) = self.body_properties(body, ancestor)?;
         }
         Ok(Some(Placeholder {
             kind,
             idx,
-            resolved_text: properties.effective().text,
+            resolved_text: properties.effective().text_levels.levels[0].clone(),
             properties,
         }))
     }
@@ -288,111 +288,170 @@ impl Parser<'_> {
                 "ctr" => TextAlignment::Center,
                 "r" => TextAlignment::Right,
                 _ => {
-                    self.warn(
-                        "unsupported inherited paragraph alignment: using left fallback".into(),
-                    );
+                    self.warn("unsupported paragraph alignment: using left fallback".into());
                     TextAlignment::Left
                 }
             });
         }
         if let Some(style) = self.single(ppr, self.dml, "defRPr")? {
-            let parsed = self.text_style(style, TextStyle::default())?;
-            if style.attribute("sz").is_some() {
-                defaults.font_size = Some(parsed.font_size);
-            }
-            if style.attribute("b").is_some() {
-                defaults.bold = Some(parsed.bold);
-            }
-            if style.attribute("i").is_some() {
-                defaults.italic = Some(parsed.italic);
-            }
-            if self.single(style, self.dml, "latin")?.is_some() {
-                defaults.family = Some(parsed.family);
-            }
-            if self.has_fill(style) {
-                defaults.color = Some(match self.fill(style)? {
-                    Some(Fill::Solid(c)) => Some(c),
-                    _ => None,
-                });
-            }
+            let alignment = defaults.alignment;
+            defaults = self.run_defaults(style)?;
+            defaults.alignment = alignment;
         }
         self.other_children(ppr, &[(self.dml, "defRPr")]);
         Ok(defaults)
     }
 
-    pub(super) fn body_defaults(
+    pub(super) fn list_style(
+        &mut self,
+        list: Node<'_, '_>,
+    ) -> Result<crate::TextListStyle, PptxError> {
+        self.attributes(list, &[]);
+        self.element_only(list)?;
+        let base = if let Some(node) = self.single(list, self.dml, "defPPr")? {
+            self.paragraph_defaults(node)?
+        } else {
+            PlaceholderTextDefaults::default()
+        };
+        let mut result = crate::TextListStyle::default();
+        for (index, level) in result.levels.iter_mut().enumerate() {
+            let name = format!("lvl{}pPr", index + 1);
+            if let Some(node) = self.single(list, self.dml, &name)? {
+                *level = self.paragraph_defaults(node)?;
+            }
+            level.inherit(&base);
+        }
+        for node in list.children().filter(|n| n.is_element()) {
+            if node.tag_name().namespace() != Some(self.dml)
+                || !matches!(
+                    node.tag_name().name(),
+                    "defPPr"
+                        | "lvl1pPr"
+                        | "lvl2pPr"
+                        | "lvl3pPr"
+                        | "lvl4pPr"
+                        | "lvl5pPr"
+                        | "lvl6pPr"
+                        | "lvl7pPr"
+                        | "lvl8pPr"
+                        | "lvl9pPr"
+                )
+            {
+                self.unsupported(node);
+            }
+        }
+        Ok(result)
+    }
+
+    pub(super) fn master_text_styles(
+        &mut self,
+        root: Node<'_, '_>,
+    ) -> Result<crate::MasterTextStyles, PptxError> {
+        let mut styles = crate::MasterTextStyles::default();
+        if let Some(node) = self.single(root, self.pml, "txStyles")? {
+            self.attributes(node, &[]);
+            self.element_only(node)?;
+            for (name, target) in [
+                ("titleStyle", &mut styles.title),
+                ("bodyStyle", &mut styles.body),
+                ("otherStyle", &mut styles.other),
+            ] {
+                if let Some(list) = self.single(node, self.pml, name)? {
+                    *target = self.list_style(list)?;
+                }
+            }
+            self.other_children(
+                node,
+                &[
+                    (self.pml, "titleStyle"),
+                    (self.pml, "bodyStyle"),
+                    (self.pml, "otherStyle"),
+                ],
+            );
+        }
+        Ok(styles)
+    }
+
+    pub(super) fn body_properties(
         &mut self,
         body: Node<'_, '_>,
         ancestor: bool,
-    ) -> Result<PlaceholderTextDefaults, PptxError> {
-        let mut defaults = PlaceholderTextDefaults::default();
-        if let Some(list) = self.single(body, self.dml, "lstStyle")? {
-            self.attributes(list, &[]);
-            self.element_only(list)?;
-            if let Some(base) = self.single(list, self.dml, "defPPr")? {
-                defaults = self.paragraph_defaults(base)?;
-            }
-            if let Some(level) = self.single(list, self.dml, "lvl1pPr")? {
-                let mut local = self.paragraph_defaults(level)?;
-                local.inherit(&defaults);
-                defaults = local;
-            }
-            self.other_children(list, &[(self.dml, "defPPr"), (self.dml, "lvl1pPr")]);
-        }
-        if !ancestor {
-            return Ok(defaults);
-        }
-        self.attributes(body, &[]);
-        self.element_only(body)?;
-        self.other_children(
-            body,
-            &[
-                (self.dml, "bodyPr"),
-                (self.dml, "lstStyle"),
-                (self.dml, "p"),
-            ],
-        );
-        if let Some(bodypr) = self.single(body, self.dml, "bodyPr")? {
-            self.element_only(bodypr)?;
-            if bodypr.attributes().len() != 0 || bodypr.children().any(|n| n.is_element()) {
-                self.warn("ancestor placeholder bodyPr properties are not inherited: using local/default insets and writing mode".into());
-            }
-        }
-        let dml = self.dml;
-        let mut paragraphs = body.children().filter(|n| n.has_tag_name((dml, "p")));
-        if let Some(first) = paragraphs.next() {
-            if let Some(ppr) = self.single(first, self.dml, "pPr")? {
-                let level = if ppr.attribute("lvl").is_some() {
-                    self.integer(ppr, "lvl", 0, 8)?
-                } else {
-                    0
-                };
-                let mut local = self.paragraph_defaults(ppr)?;
-                if level == 0 {
-                    local.inherit(&defaults);
-                    defaults = local;
-                } else {
-                    self.warn(
-                        "placeholder paragraph level: only level zero defaults are inherited"
-                            .into(),
-                    );
+    ) -> Result<(crate::TextListStyle, crate::text_defaults::InsetDefaults), PptxError> {
+        let mut levels = if let Some(list) = self.single(body, self.dml, "lstStyle")? {
+            self.list_style(list)?
+        } else {
+            crate::TextListStyle::default()
+        };
+        let mut insets = crate::text_defaults::InsetDefaults::default();
+        if let Some(node) = self.single(body, self.dml, "bodyPr")? {
+            for (name, target) in ["lIns", "rIns", "tIns", "bIns"]
+                .into_iter()
+                .zip(&mut insets.0)
+            {
+                if node.attribute(name).is_some() {
+                    *target = Some(emu_to_points(self.integer(
+                        node,
+                        name,
+                        0,
+                        i64::from(i32::MAX),
+                    )?));
                 }
             }
-            if first
-                .children()
-                .filter(|n| n.has_tag_name((self.dml, "r")))
-                .any(|n| n.children().any(|r| r.has_tag_name((self.dml, "rPr"))))
-            {
-                self.warn("placeholder run formatting is content-specific and is not inherited; use paragraph defRPr".into());
+            if ancestor {
+                self.attributes(node, &["lIns", "rIns", "tIns", "bIns", "anchor", "wrap"]);
+                for (name, supported) in [("anchor", "t"), ("wrap", "square")] {
+                    if node.attribute(name).is_some_and(|v| v != supported) {
+                        self.warn(format!(
+                            "unsupported inherited bodyPr {name}: using supported textbox defaults"
+                        ));
+                    }
+                }
+                self.element_only(node)?;
+                for child in node.children().filter(|n| n.is_element()) {
+                    if child.has_tag_name((self.dml, "noAutofit")) {
+                        self.attributes(child, &[]);
+                        self.leaf(child)?;
+                    } else {
+                        self.unsupported(child);
+                    }
+                }
             }
         }
-        if paragraphs.next().is_some() {
-            self.warn(
-                "placeholder has multiple paragraphs: only first paragraph defaults are inherited"
-                    .into(),
+        if ancestor {
+            self.attributes(body, &[]);
+            self.element_only(body)?;
+            self.other_children(
+                body,
+                &[
+                    (self.dml, "bodyPr"),
+                    (self.dml, "lstStyle"),
+                    (self.dml, "p"),
+                ],
             );
+            let mut seen = [false; 9];
+            let dml = self.dml;
+            for paragraph in body.children().filter(|n| n.has_tag_name((dml, "p"))) {
+                if let Some(ppr) = self.single(paragraph, self.dml, "pPr")? {
+                    let level = self.paragraph_level(Some(ppr))?;
+                    let mut local = self.paragraph_defaults(ppr)?;
+                    if !seen[level] {
+                        local.inherit(&levels.levels[level]);
+                        levels.levels[level] = local;
+                        seen[level] = true;
+                    } else {
+                        self.warn(format!("ancestor placeholder has multiple paragraphs at level {level}: first paragraph defaults inherited"));
+                    }
+                }
+                if paragraph
+                    .children()
+                    .filter(|n| n.has_tag_name((self.dml, "r")))
+                    .any(|n| n.children().any(|r| r.has_tag_name((self.dml, "rPr"))))
+                {
+                    self.warn("placeholder run formatting is content-specific and is not inherited; use paragraph defRPr".into());
+                }
+            }
         }
-        Ok(defaults)
+        Ok((levels, insets))
     }
 
     pub(super) fn placeholder_shapes(
@@ -400,7 +459,10 @@ impl Parser<'_> {
         node: Node<'_, '_>,
         ph: &Placeholder,
     ) -> Result<Vec<Shape>, PptxError> {
-        let effective = ph.properties.effective();
+        let mut effective = ph.properties.effective();
+        effective
+            .text_levels
+            .inherit(self.text_styles.for_kind(&ph.kind));
         let props = &effective;
         if props.geometry_blocked {
             self.warn("unsupported inherited placeholder geometry: element omitted".into());
@@ -450,7 +512,7 @@ impl Parser<'_> {
             }
         }
         if let Some(body) = self.single(node, self.pml, "txBody")? {
-            if let Some(text) = self.text_box(body, rect, Some(&props.text))? {
+            if let Some(text) = self.text_box(body, rect, Some(props))? {
                 shapes.push(Shape::TextBox(text));
             }
         }

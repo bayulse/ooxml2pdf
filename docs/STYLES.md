@@ -158,3 +158,12 @@ cargo fmt
 cargo clippy --workspace --all-targets --all-features
 cargo test --workspace
 ```
+
+## Fidelity 2A integration
+
+Color-map semantics and the supported master text-style hierarchy now precede
+final fallback. All scheme references, including matrix-entry expressions, use
+the effective map through the central color adapter. Direct/inherited properties
+still precede separately merged references; references precede applicable master
+text styles. See [THEMES.md](THEMES.md) and [INHERITANCE.md](INHERITANCE.md).
+The earlier deferred-text/color-map statements above describe 1I-C history.

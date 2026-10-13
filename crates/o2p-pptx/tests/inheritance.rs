@@ -680,18 +680,14 @@ fn unsupported_ancestor_semantics_warn_and_do_not_guess() {
         "<p:txStyles><p:bodyStyle/></p:txStyles></p:sldMaster>",
     );
     let model = parse(&parts).unwrap();
-    assert!(
-        warning(&model, "gradFill")
-            && warning(&model, "lvl2pPr")
-            && warning(&model, "txStyles")
-            && warning(&model, "bodyPr")
-    );
+    assert!(warning(&model, "gradFill") && warning(&model, "bodyPr"));
     assert!(
         !model.to_display_list().pages[0]
             .ops
             .iter()
             .any(|op| matches!(op, DrawOp::Rect(_)))
     );
+    assert!(!warning(&model, "lvl2pPr") && !warning(&model, "txStyles"));
     assert_eq!(text(&model, 0).paragraphs[0].runs[0].style.font_size, 18.0);
 }
 

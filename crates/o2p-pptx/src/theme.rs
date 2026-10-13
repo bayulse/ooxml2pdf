@@ -102,7 +102,13 @@ impl ColorValue {
                 let color = if name == "phClr" {
                     placeholder
                 } else {
-                    theme.and_then(|theme| theme.resolve_color(name))
+                    theme.and_then(|theme| {
+                        let slot = context.color_map.map_or_else(
+                            || ThemeColorSlot::from_name(name),
+                            |map| map.resolve_slot(name),
+                        )?;
+                        theme.colors.colors.get(&slot).copied()
+                    })
                 };
                 if color.is_none() {
                     context.warn(format!("schemeClr {}: theme color unavailable; paint omitted or paragraph/default text color retained", crate::xml::expanded(None, name)));

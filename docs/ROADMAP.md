@@ -346,10 +346,39 @@ private testing, metric limits and report interpretation. Public cases without
 independent references remain NOT_COMPARED; successful rendering alone is not
 evidence of Office fidelity.
 
+## Fidelity 2A — Text inheritance and color-map semantics (complete)
+
+Baseline: clean committed `d1a27f6`, with independent PowerPoint references and
+six MAJOR_DIFFERENCE public cases. This bounded milestone implements the recurring
+text-inheritance/color-map gaps without speculative renderer features.
+
+- Resolve run/paragraph/list/layout/master properties independently, retaining
+  direct formatting, false, zero, and unavailable-value precedence.
+- Support master titleStyle/bodyStyle/otherStyle, defPPr, nine paragraph levels,
+  defRPr, Latin major/minor families, and inherited textbox insets.
+- Preserve unresolved-format warnings after the supported hierarchy; diagnose
+  missing family/size/color rather than every non-placeholder textbox.
+- Add separate owned clrMap and clrMapOvr semantics with master/layout/slide
+  precedence and explicit master-map selection.
+- Route every supported contextual scheme-color path through the effective map,
+  including references, backgrounds, inherited paints, and style-matrix entries.
+- Add nineteen focused fixtures and semantic/PDF tests; preserve generic fonts,
+  Unicode shaping, wrapping, embedding/mappings, rotation, and flipping.
+- Keep all dependencies and excluded rendering features unchanged.
+
+Measured result: public differences are unchanged, all six cases remain
+MAJOR_DIFFERENCE, warnings decrease 93 -> 20, text fallback 50 -> 1, and clrMap/
+clrMapOvr warnings 24 -> 0. No measured corpus fidelity improvement is claimed.
+See [Fidelity 2A report](../compat/reports/FIDELITY_2A.md),
+[INHERITANCE.md](INHERITANCE.md), and [THEMES.md](THEMES.md).
+
+Presentation defaultTextStyle, script-specific typography, bullets, spacing,
+autofit, vertical writing/anchor behavior, and advanced effects remain deferred.
+
 ## Next renderer milestones — selected from corpus evidence
 
-1. Collect reviewed PowerPoint references and a representative ignored private
-   corpus. Preserve reference versions, fonts, export settings and input identity.
+1. Preserve the independent PowerPoint references already collected and add a
+   representative ignored private corpus. Preserve reference versions, fonts, export settings and input identity.
 2. Review visual major/minor differences alongside fidelity-gap frequency and
    affected-case counts. Distinguish missing implementation from font setup,
    exporter variation and existing behavior defects.

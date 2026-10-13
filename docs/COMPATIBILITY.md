@@ -274,3 +274,25 @@ missing references/rasterizer, conversion failure, metric behavior, threshold
 boundaries, stale artifacts, provenance validation, batch gaps, deterministic
 corpus generation and parity with `o2p convert`. Harness self-comparison tests are
 explicitly test-only, never distributed as PowerPoint references.
+
+## Fidelity 2A measurement against independent PowerPoint references
+
+Fidelity 2A uses clean committed `d1a27f6` as the code baseline and the existing
+Microsoft PowerPoint for Mac 16.113.3 (26092714) exports. Reference files, corpus
+inputs, metric thresholds, DPI, and configured fixture fonts are unchanged.
+[The before/after report](../compat/reports/FIDELITY_2A.md) records all six cases,
+each slide's difference, overall means, warning counts, and remaining gaps.
+
+For 001-basic-shapes, slide 1 stays 0.239340, slide 2 stays 0.168438, and overall
+stays 0.203889 (MAJOR_DIFFERENCE). Warnings fall 17 -> 3. Across six cases,
+image metrics stay unchanged and all remain MAJOR_DIFFERENCE; warning counts
+fall 93 -> 20, text fallback 50 -> 1, and clrMap/clrMapOvr 24 -> 0.
+No visual success is inferred from warning disappearance. None of these inputs
+contains master txStyles; scheme usages do not exercise changed color maps.
+Focused synthetic fixtures prove the implemented semantic paths, while broader
+PowerPoint-authored inputs are needed to measure their visual impact.
+
+The remaining text fallback is a body placeholder in 004-theme-layout with no
+resolved text color. Remaining notesSz, sldMasterIdLst, sldLayoutIdLst and legacy
+unwrapped-overflow diagnostics are unchanged. Batch exit 1 is expected while
+cases remain MAJOR_DIFFERENCE; it does not mean conversion or tooling failed.
