@@ -400,3 +400,39 @@ resolved insets and before shape transforms. Existing line metrics are unchanged
 no autofit or font shrinking is implemented. See [TYPOGRAPHY.md](TYPOGRAPHY.md)
 for the current contracts and limits. Earlier bullet/spacing/anchor deferrals in
 this document describe earlier milestones.
+
+## Fidelity 2E — Scalable vertical metrics
+
+`FontMetadata::vertical_metrics` exposes an owned `FontVerticalMetrics` with
+unitsPerEm, signed ascender/descender/line gap, and `VerticalMetricSource`.
+The existing ttf-parser adapter supplies these values; no dependencies or font
+assets were added. Selection uses a complete table triplet:
+
+1. OS/2 version >= 4 with fsSelection bit 7 (`USE_TYPO_METRICS`): use
+   sTypoAscender, sTypoDescender, sTypoLineGap. Invalid authoritative metrics
+   return `InvalidFont` rather than silently selecting another table.
+2. Otherwise use valid hhea ascender/descender/lineGap, preserving the preceding
+   adapter's normal selection for unflagged fonts.
+3. If hhea has no valid ascent/descent, use a valid complete OS/2 typo triplet,
+   then unsigned usWinAscent/usWinDescent with zero gap. Never mix triplets.
+
+Valid ascent is positive and descent nonpositive. usWin values remain i32,
+preserving the complete u16 range without signed overflow. Legacy i16 descriptor
+metadata saturates selected values. All outline, permission, resource-limit and
+auxiliary bitmap-strike checks remain enforced.
+
+The [OpenType OS/2 specification](https://learn.microsoft.com/en-us/typography/opentype/spec/os2)
+recommends typo metrics when bit 7 is set, defined from OS/2 version 4. It does
+not establish one universal application policy for older fonts. Our hhea fallback
+is an explicit portable policy, not a claim that every PowerPoint version uses
+that table. See also the [hhea specification](https://learn.microsoft.com/en-us/typography/opentype/spec/hhea).
+
+`at_size(S)` scales in f64 by `S / unitsPerEm`. Ascent is positive; descent is
+the negated signed design-unit value. Negative gap is clamped to zero to prevent
+overlapping font boxes. `FontLineMetrics::height()` sums ascent, descent and gap.
+`ShapeReport::metrics` takes independent maxima across actual selected faces,
+including grapheme fallback. Advances, glyph IDs, offsets, styles and clusters
+are unchanged. Empty sources resolve their end font when available; without any
+fonts they retain the previous empty-document contract with no glyphs and zero
+metrics. Nonempty text still requires fonts. Earlier 1.2-times-size descriptions
+are historical; current placement is documented in [TYPOGRAPHY.md](TYPOGRAPHY.md).

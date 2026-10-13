@@ -8,6 +8,8 @@ use unicode_segmentation::UnicodeSegmentation;
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct ShapeReport {
+    /// Scaled maxima from the faces actually selected for this source.
+    pub metrics: crate::FontLineMetrics,
     pub text: ShapedText,
     pub warnings: Vec<FontWarning>,
 }
@@ -41,6 +43,25 @@ pub fn shape(
     let mut runs = Vec::new();
     let mut pen = 0.0_f64;
     let mut glyph_count = 0;
+    let mut metrics = crate::FontLineMetrics::default();
+    if source.is_empty() {
+        match resolver.resolve(request, "") {
+            Ok(selection) => {
+                metrics.include(
+                    selection
+                        .font
+                        .metadata()
+                        .vertical_metrics
+                        .at_size(font_size)?,
+                );
+                warnings.extend(selection.warnings);
+            }
+            // Preserve empty-document conversion without configured fonts.
+            // No glyphs and no available scalable line box: report zero metrics.
+            Err(FontError::NoFonts) => {}
+            Err(error) => return Err(error),
+        }
+    }
     let bidi = unicode_bidi::BidiInfo::new(source, None);
     for paragraph in &bidi.paragraphs {
         let (levels, visual) = bidi.visual_runs(paragraph, paragraph.range.clone());
@@ -74,6 +95,13 @@ pub fn shape(
             let mut segments: Vec<Segment> = Vec::new();
             for ((offset, cluster), script) in clusters.into_iter().zip(scripts) {
                 let selection = resolver.resolve(request, cluster)?;
+                metrics.include(
+                    selection
+                        .font
+                        .metadata()
+                        .vertical_metrics
+                        .at_size(font_size)?,
+                );
                 for warning in selection.warnings {
                     if !warnings.contains(&warning) {
                         warnings.push(warning);
@@ -188,6 +216,7 @@ pub fn shape(
         }
     }
     Ok(ShapeReport {
+        metrics,
         text: ShapedText {
             source: source.into(),
             font_size,

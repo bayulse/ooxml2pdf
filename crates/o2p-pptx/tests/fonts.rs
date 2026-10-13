@@ -172,7 +172,9 @@ fn unicode_fixture_and_existing_text_image_shape_paint_order_are_preserved() {
                     assert_eq!(old.text, new.text.source);
                     assert_eq!(old.font_size, new.text.font_size);
                     assert_eq!(old.color, new.color);
-                    assert_eq!(old.origin.y, new.origin.y);
+                    // The configured path now uses scalable ascent rather than
+                    // the legacy standard-font size-as-baseline heuristic.
+                    assert!(new.origin.y.is_finite());
                 }
                 _ => assert_eq!(old, new),
             }

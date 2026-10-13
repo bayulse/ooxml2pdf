@@ -32,6 +32,7 @@ fn paragraph(runs: Vec<TextRun>) -> Paragraph {
         runs,
         alignment: Alignment::Left,
         empty_font_size: 20.0,
+        empty_font: run("").font,
     }
 }
 fn bounds(width: f32, height: f32) -> Rect {
@@ -170,8 +171,8 @@ fn percentage_spacing_uses_largest_font_on_first_and_last_lines() {
     p.format.space_after = o2p_core::ParagraphSpacing::TextMultiple(0.25);
     let report = layout(&[p], bounds(500.0, 500.0), &fonts()).unwrap();
     assert_eq!(report.lines.len(), 2);
-    near(report.lines[0].baseline.y, 52.0);
-    assert_eq!(report.height, 80.0);
+    near(report.lines[0].baseline.y, 54.07);
+    assert!((report.height - 88.1).abs() < 0.00001);
 }
 
 #[test]
@@ -181,15 +182,15 @@ fn vertical_anchors_shift_entire_measured_block_and_preserve_overflow() {
     p.format.space_after = o2p_core::ParagraphSpacing::Points(6.0);
     for (anchor, offset) in [
         (o2p_core::VerticalAlignment::Top, 0.0),
-        (o2p_core::VerticalAlignment::Center, 68.0),
-        (o2p_core::VerticalAlignment::Bottom, 136.0),
+        (o2p_core::VerticalAlignment::Center, 64.76),
+        (o2p_core::VerticalAlignment::Bottom, 129.52),
     ] {
         let report =
             o2p_layout::layout_text_box(&[p.clone()], bounds(200.0, 200.0), anchor, &fonts())
                 .unwrap();
-        assert_eq!(report.height, 64.0);
-        near(report.lines[0].baseline.y, 37.0 + offset);
-        near(report.lines[1].baseline.y, 61.0 + offset);
+        assert!((report.height - 70.48).abs() < 0.00001);
+        near(report.lines[0].baseline.y, 38.38 + offset);
+        near(report.lines[1].baseline.y, 65.62 + offset);
         assert!(!report.overflow);
     }
     let report = o2p_layout::layout_text_box(
@@ -200,7 +201,7 @@ fn vertical_anchors_shift_entire_measured_block_and_preserve_overflow() {
     )
     .unwrap();
     assert!(report.overflow);
-    near(report.lines[0].baseline.y, -7.0);
+    near(report.lines[0].baseline.y, -12.1);
 }
 
 #[test]
@@ -213,7 +214,7 @@ fn empty_bullet_paragraphs_keep_line_height_without_a_glyph() {
         color: Color::BLACK,
     });
     let report = layout(&[p], bounds(100.0, 100.0), &fonts()).unwrap();
-    assert_eq!(report.height, 24.0);
+    assert!((report.height - 27.24).abs() < 0.00001);
     assert!(report.lines[0].runs.is_empty());
 }
 
@@ -362,14 +363,13 @@ fn explicit_breaks_blank_lines_empty_paragraphs_and_empty_boxes_stack() {
     )
     .unwrap();
     assert_eq!(line_sources(&report), ["A", "", "B", "", "", "C"]);
-    assert_eq!(
-        report
-            .lines
-            .iter()
-            .map(|l| l.baseline.y)
-            .collect::<Vec<_>>(),
-        [27.0, 51.0, 75.0, 99.0, 113.0, 135.0]
-    );
+    for (line, expected) in report
+        .lines
+        .iter()
+        .zip([28.38, 55.62, 82.86, 110.1, 126.65, 150.96])
+    {
+        near(line.baseline.y, expected);
+    }
     let empty = layout(&[], bounds(0.0, 0.0), &book).unwrap();
     assert!(empty.lines.is_empty() && empty.warnings.is_empty() && !empty.overflow);
     assert!(

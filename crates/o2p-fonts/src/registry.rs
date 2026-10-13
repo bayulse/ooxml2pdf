@@ -82,7 +82,14 @@ impl fmt::Display for FontWarning {
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct FontMetadata {
+    pub vertical_metrics: crate::FontVerticalMetrics,
+    /// Canonical rendering family: WWS (21), legacy (1), typographic (16).
     pub family: String,
+    /// All decoded family names (1/16/21), including localized identities.
+    pub family_aliases: Vec<String>,
+    pub subfamily: String,
+    pub full_name: Option<String>,
+    pub names: Vec<crate::FontName>,
     pub postscript_name: String,
     pub weight: u16,
     pub italic: bool,
@@ -153,27 +160,32 @@ impl FontFace {
         {
             return Err(FontError::EmbeddingRestricted);
         }
-        let name = |id| {
-            face.names()
-                .into_iter()
-                .filter(|n| n.name_id == id)
-                .filter_map(|n| n.to_string())
-                .find(|s| !s.is_empty() && s.len() <= 256)
-        };
+        let names = crate::names::Names::read(&face);
         let bounds = face.global_bounding_box();
+        let vertical_metrics = crate::metrics::read(&face)?;
+        // Descriptor fields are i16; preserve full Windows fallback values in
+        // vertical_metrics and avoid signed parser convenience getters.
+        let descriptor_metric =
+            |value: i32| value.clamp(i32::from(i16::MIN), i32::from(i16::MAX)) as i16;
         let metadata = FontMetadata {
-            family: name(ttf_parser::name_id::TYPOGRAPHIC_FAMILY)
-                .or_else(|| name(ttf_parser::name_id::FAMILY))
-                .ok_or(FontError::InvalidFont)?,
-            postscript_name: name(ttf_parser::name_id::POST_SCRIPT_NAME)
+            vertical_metrics,
+            family: names.family().ok_or(FontError::InvalidFont)?,
+            family_aliases: names.aliases(),
+            subfamily: names.subfamily(),
+            full_name: names.preferred(ttf_parser::name_id::FULL_NAME),
+            postscript_name: names
+                .preferred(ttf_parser::name_id::POST_SCRIPT_NAME)
                 .unwrap_or_else(|| "ConfiguredFont".into()),
+            names: names.records,
             weight: face.weight().to_number(),
             italic: face.is_italic(),
             units_per_em: face.units_per_em(),
-            ascent: face.ascender(),
-            descent: face.descender(),
-            line_gap: face.line_gap(),
-            cap_height: face.capital_height().unwrap_or(face.ascender()),
+            ascent: descriptor_metric(vertical_metrics.ascender),
+            descent: descriptor_metric(vertical_metrics.descender),
+            line_gap: descriptor_metric(vertical_metrics.line_gap),
+            cap_height: face
+                .capital_height()
+                .unwrap_or(descriptor_metric(vertical_metrics.ascender)),
             bounds: [bounds.x_min, bounds.y_min, bounds.x_max, bounds.y_max],
             italic_angle: face.italic_angle(),
             glyph_count: face.number_of_glyphs(),
@@ -217,6 +229,34 @@ pub(crate) fn ignorable(c: char) -> bool {
 pub struct FontSelection {
     pub font: Arc<FontFace>,
     pub warnings: Vec<FontWarning>,
+}
+
+/// Successful resolution telemetry, separate from warnings. Contains metadata
+/// only, never font bytes or a local path. Custom resolvers can use this too.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct FontResolution {
+    pub requested: FontRequest,
+    pub resolved_family: String,
+    pub resolved_subfamily: String,
+    pub resolved_weight: u16,
+    pub resolved_italic: bool,
+    pub full_name: Option<String>,
+    pub postscript_name: String,
+}
+
+impl FontSelection {
+    pub fn diagnostic(&self, requested: &FontRequest) -> FontResolution {
+        let m = self.font.metadata();
+        FontResolution {
+            requested: requested.clone(),
+            resolved_family: m.family.clone(),
+            resolved_subfamily: m.subfamily.clone(),
+            resolved_weight: m.weight,
+            resolved_italic: m.italic,
+            full_name: m.full_name.clone(),
+            postscript_name: m.postscript_name.clone(),
+        }
+    }
 }
 
 /// A consumer may implement this using bundled or platform-provided font data.
@@ -306,8 +346,22 @@ impl FontBook {
         self.aliases.insert(key(&requested), compatible);
     }
 }
-fn key(s: &str) -> String {
+pub(crate) fn key(s: &str) -> String {
     s.trim().to_lowercase()
+}
+
+fn family_strength(metadata: &FontMetadata, family: &str) -> Option<u8> {
+    if key(&metadata.family) == family {
+        Some(0)
+    } else if metadata
+        .family_aliases
+        .iter()
+        .any(|alias| key(alias) == family)
+    {
+        Some(1)
+    } else {
+        None
+    }
 }
 impl FontResolver for FontBook {
     fn resolve(&self, request: &FontRequest, cluster: &str) -> Result<FontSelection, FontError> {
@@ -323,7 +377,7 @@ impl FontResolver for FontBook {
             && !self
                 .fonts
                 .iter()
-                .any(|f| key(&f.metadata.family) == requested)
+                .any(|f| family_strength(&f.metadata, &requested).is_some())
         {
             warnings.push(FontWarning::MissingFont {
                 family: request.family.clone(),
@@ -337,18 +391,30 @@ impl FontResolver for FontBook {
         let mut first = None;
         let mut selected = None;
         for family in families {
+            let family = key(&family);
             let mut candidates: Vec<_> = self
                 .fonts
                 .iter()
-                .enumerate()
-                .filter(|(_, f)| key(&f.metadata.family) == key(&family))
+                .filter_map(|f| {
+                    family_strength(&f.metadata, &family).map(|strength| {
+                        (
+                            (
+                                strength,
+                                f.metadata.italic != request.italic,
+                                f.metadata.weight.abs_diff(request.weight),
+                                key(&f.metadata.family),
+                            ),
+                            f,
+                        )
+                    })
+                })
                 .collect();
-            candidates.sort_by_key(|(index, f)| {
-                (
-                    f.metadata.italic != request.italic,
-                    f.metadata.weight.abs_diff(request.weight),
-                    *index,
-                )
+            // Equal metadata still needs a stable content tie-break. Comparing
+            // bytes avoids hash collisions and adds no dependency or file paths.
+            candidates.sort_by(|(a_rank, a), (b_rank, b)| {
+                (a_rank, &a.metadata.family, &a.metadata.postscript_name)
+                    .cmp(&(b_rank, &b.metadata.family, &b.metadata.postscript_name))
+                    .then_with(|| a.resource.bytes.cmp(&b.resource.bytes))
             });
             for (_, font) in candidates {
                 first.get_or_insert(font.clone());

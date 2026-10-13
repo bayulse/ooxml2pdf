@@ -457,3 +457,20 @@ MAJOR_DIFFERENCE with a residual vertical title displacement. The six-case targe
 is not reached. See [FIDELITY_2D.md](../compat/reports/FIDELITY_2D.md). Stop at
 correct family identity: kerning, normAutofit/spAutoFit, additional paragraph
 semantics, effects, discovery, DOCX/XLSX and Flutter remain separate work.
+
+## Fidelity 2E — Font vertical metrics and baseline parity
+
+Completed: generic scalable OpenType metrics and normalization, explicit line
+boxes/baselines, mixed-face/size/fallback maxima, bullet/blank-line metrics and
+measured top/center/bottom anchoring. Paragraph spacing and horizontal wrapping
+are preserved. An explicit diagnostic is available; no new fonts or dependencies.
+
+Valid paired Office-font corpus: **6 MINOR_DIFFERENCE, 0 MAJOR**. All twelve means
+improve; 004 slide 2 worst block 0.755560 -> 0.445491 and title displacement 7px ->
+about 1px at 144 DPI. See [the report](../compat/reports/FIDELITY_2E.md).
+
+Kerning threshold semantics, character spacing, normAutofit/spAutoFit, explicit
+line spacing, gradients, new fills/outlines/effects/shapes, platform/CloudFont
+discovery, DOCX, XLSX and Flutter remain deferred. Empty normAutofit implies 100%
+font scale and zero spacing reduction; no iterative fitting was added. Runtime
+remains native Rust and offline.

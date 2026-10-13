@@ -8,7 +8,9 @@ pub use unwrapped::layout_unwrapped;
 use o2p_core::{
     Bullet, Color, GlyphTextOp, ParagraphFormat, Point, Rect, ShapedText, VerticalAlignment,
 };
-use o2p_fonts::{FontError, FontRequest, FontResolver, FontWarning, MAX_TEXT_BYTES};
+use o2p_fonts::{
+    FontError, FontLineMetrics, FontRequest, FontResolver, FontWarning, MAX_TEXT_BYTES,
+};
 use std::ops::Range;
 use unicode_segmentation::UnicodeSegmentation;
 
@@ -42,12 +44,19 @@ pub struct Paragraph {
     pub alignment: Alignment,
     /// Empty paragraphs and trailing explicit breaks occupy a line of this size.
     pub empty_font_size: f32,
+    pub empty_font: FontRequest,
 }
 
 /// A measured line, including blank lines. Runs share this baseline and retain
 /// their own font size, color and resolved font resources.
 #[derive(Debug, Clone, PartialEq)]
 pub struct Line {
+    /// Downward-positive point coordinates, after anchoring and spacing.
+    pub top: f64,
+    pub bottom: f64,
+    pub metrics: FontLineMetrics,
+    /// Largest text size; paragraph percentages use this, not line height.
+    pub font_size: f64,
     pub baseline: Point,
     pub width: f64,
     pub height: f64,
@@ -68,6 +77,11 @@ struct Fragment<'a> {
     range: Range<usize>,
     style: &'a TextRun,
     shaped: ShapedText,
+    metrics: FontLineMetrics,
+}
+struct MeasuredRun {
+    op: GlyphTextOp,
+    metrics: FontLineMetrics,
 }
 
 struct Atom {
@@ -155,6 +169,15 @@ pub fn layout_text_box(
     for paragraph in paragraphs {
         let paragraph_start = report.lines.len();
         let paragraph_top = top;
+        let bullet = paragraph
+            .bullet
+            .as_ref()
+            .filter(|_| paragraph.runs.iter().any(|r| !r.text.is_empty()))
+            .map(|b| o2p_fonts::shape(resolver, &b.glyph, &b.font, b.font_size))
+            .transpose()?;
+        if let Some(shaped) = &bullet {
+            warnings(&mut report.warnings, shaped.warnings.clone());
+        }
         let mut reshaped_bytes = 0;
         let mut hard_lines = vec![Vec::new()];
         for run in &paragraph.runs {
@@ -182,12 +205,33 @@ pub fn layout_text_box(
                     range: start..source.len(),
                     style,
                     shaped: shaped.text,
+                    metrics: shaped.metrics,
                 });
             }
             if source.is_empty() {
                 let empty_bounds =
                     line_bounds(bounds, paragraph, report.lines.len() == paragraph_start)?;
-                append_line(&mut report, Vec::new(), paragraph, empty_bounds, &mut top)?;
+                let blank = o2p_fonts::shape(
+                    resolver,
+                    "",
+                    &paragraph.empty_font,
+                    paragraph.empty_font_size,
+                )?;
+                warnings(&mut report.warnings, blank.warnings);
+                let mut metrics = blank.metrics;
+                if report.lines.len() == paragraph_start {
+                    if let Some(bullet) = &bullet {
+                        metrics.include(bullet.metrics);
+                    }
+                }
+                append_line(
+                    &mut report,
+                    Vec::new(),
+                    paragraph,
+                    empty_bounds,
+                    &mut top,
+                    metrics,
+                )?;
                 continue;
             }
             let atoms = atoms(&source, &fragments);
@@ -229,7 +273,7 @@ pub fn layout_text_box(
                         &mut report.warnings,
                         &mut reshaped_bytes,
                     )?;
-                    let width: f64 = runs.iter().map(|r| f64::from(r.text.advance.x)).sum();
+                    let width: f64 = runs.iter().map(|r| f64::from(r.op.text.advance.x)).sum();
                     if width <= f64::from(line_bounds.size.width) || last == first + 1 {
                         break runs;
                     }
@@ -238,26 +282,31 @@ pub fn layout_text_box(
                         .find(|&end| atoms[end - 1].whitespace)
                         .unwrap_or(last - 1);
                 };
-                append_line(&mut report, runs, paragraph, line_bounds, &mut top)?;
+                let bullet_metrics = bullet
+                    .as_ref()
+                    .filter(|_| report.lines.len() == paragraph_start)
+                    .map(|b| b.metrics);
+                append_line(
+                    &mut report,
+                    runs,
+                    paragraph,
+                    line_bounds,
+                    &mut top,
+                    bullet_metrics.unwrap_or_default(),
+                )?;
                 first = last;
             }
         }
-        let first_size = report.lines[paragraph_start].height / 1.2;
+        let first_size = report.lines[paragraph_start].font_size;
         let last_size = report
             .lines
             .last()
-            .map_or(first_size, |line| line.height / 1.2);
+            .map_or(first_size, |line| line.font_size);
         let before = paragraph.format.space_before.points(first_size);
         let after = paragraph.format.space_after.points(last_size);
         shift_lines(&mut report.lines[paragraph_start..], before)?;
         top += before + after;
-        if let Some(bullet) = paragraph
-            .bullet
-            .as_ref()
-            .filter(|_| paragraph.runs.iter().any(|r| !r.text.is_empty()))
-        {
-            let shaped = o2p_fonts::shape(resolver, &bullet.glyph, &bullet.font, bullet.font_size)?;
-            warnings(&mut report.warnings, shaped.warnings);
+        if let (Some(bullet), Some(shaped)) = (&paragraph.bullet, bullet) {
             let first = &mut report.lines[paragraph_start];
             let bullet_x =
                 f64::from(first.baseline.x) + f64::from(paragraph.format.first_line_indent);
@@ -301,6 +350,8 @@ fn shift_lines(lines: &mut [Line], offset: f64) -> Result<(), FontError> {
             return Err(FontError::InvalidRequest);
         }
         line.baseline.y = y as f32;
+        line.top += offset;
+        line.bottom += offset;
         for run in &mut line.runs {
             run.origin.y = line.baseline.y;
         }
@@ -415,7 +466,7 @@ fn shape_range(
     resolver: &dyn FontResolver,
     diagnostics: &mut Vec<FontWarning>,
     reshaped_bytes: &mut usize,
-) -> Result<Vec<GlyphTextOp>, FontError> {
+) -> Result<Vec<MeasuredRun>, FontError> {
     let first = fragments.partition_point(|f| f.range.end <= range.start);
     let mut runs = Vec::new();
     for fragment in &fragments[first..] {
@@ -424,8 +475,8 @@ fn shape_range(
         }
         let start = range.start.max(fragment.range.start) - fragment.range.start;
         let end = range.end.min(fragment.range.end) - fragment.range.start;
-        let text = if start == 0 && end == fragment.shaped.source.len() {
-            fragment.shaped.clone()
+        let (text, metrics) = if start == 0 && end == fragment.shaped.source.len() {
+            (fragment.shaped.clone(), fragment.metrics)
         } else {
             *reshaped_bytes += end - start;
             if *reshaped_bytes > MAX_TEXT_BOX_BYTES {
@@ -443,12 +494,15 @@ fn shape_range(
                 fragment.style.font_size,
             )?;
             warnings(diagnostics, shaped.warnings);
-            shaped.text
+            (shaped.text, shaped.metrics)
         };
-        runs.push(GlyphTextOp {
-            origin: Point { x: 0.0, y: 0.0 },
-            text,
-            color: fragment.style.color,
+        runs.push(MeasuredRun {
+            metrics,
+            op: GlyphTextOp {
+                origin: Point { x: 0.0, y: 0.0 },
+                text,
+                color: fragment.style.color,
+            },
         });
     }
     Ok(runs)
@@ -456,16 +510,22 @@ fn shape_range(
 
 fn append_line(
     report: &mut LayoutReport,
-    mut runs: Vec<GlyphTextOp>,
+    measured: Vec<MeasuredRun>,
     paragraph: &Paragraph,
     bounds: Rect,
     top: &mut f64,
+    additional_metrics: FontLineMetrics,
 ) -> Result<(), FontError> {
-    let size = runs
+    let size = measured
         .iter()
-        .map(|run| f64::from(run.text.font_size))
+        .map(|run| f64::from(run.op.text.font_size))
         .reduce(f64::max)
         .unwrap_or(f64::from(paragraph.empty_font_size));
+    let mut metrics = additional_metrics;
+    for run in &measured {
+        metrics.include(run.metrics);
+    }
+    let mut runs: Vec<_> = measured.into_iter().map(|r| r.op).collect();
     let width: f64 = runs.iter().map(|run| f64::from(run.text.advance.x)).sum();
     let offset = match paragraph.alignment {
         Alignment::Left => 0.0,
@@ -473,8 +533,9 @@ fn append_line(
         Alignment::Right => f64::from(bounds.size.width) - width,
     };
     let mut x = f64::from(bounds.origin.x) + offset;
-    let baseline = *top + size;
-    let height = size * 1.2;
+    // Leading follows the descent. Origin is the baseline, never line top.
+    let baseline = *top + metrics.ascent;
+    let height = metrics.height();
     let next = *top + height;
     if !width.is_finite()
         || !(x as f32).is_finite()
@@ -500,6 +561,10 @@ fn append_line(
     report.overflow |= width > f64::from(bounds.size.width)
         || next > f64::from(bounds.origin.y) + f64::from(bounds.size.height);
     report.lines.push(Line {
+        top: *top,
+        bottom: next,
+        metrics,
+        font_size: size,
         baseline: line_baseline,
         width,
         height,

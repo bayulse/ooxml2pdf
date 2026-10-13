@@ -301,8 +301,8 @@ fn title_and_body_alignment_inherit_and_local_alignment_wins() {
 #[test]
 fn point_spacing_is_applied_between_paragraph_boxes() {
     for (name, first_y, delta) in [
-        ("paragraph-space-before.pptx", 105.6, 24.0),
-        ("paragraph-space-after.pptx", 95.6, 32.0),
+        ("paragraph-space-before.pptx", 106.98, 27.24),
+        ("paragraph-space-after.pptx", 96.98, 35.24),
     ] {
         let model = parse(&typography_fixture(name)).unwrap();
         let ops = glyphs(&model);
@@ -326,7 +326,7 @@ fn percent_spacing_normalizes_integer_and_strict_percent_forms() {
             text(&model).paragraphs[0].format.space_before,
             ParagraphSpacing::TextMultiple(0.25)
         );
-        near(glyphs(&model)[0].origin.y, 100.6);
+        near(glyphs(&model)[0].origin.y, 101.98);
     }
 }
 
@@ -351,9 +351,9 @@ fn spacing_inheritance_and_local_zero_preserve_independent_properties() {
 #[test]
 fn default_edge_spacing_is_suppressed_and_explicit_true_is_respected() {
     for (body, expected) in [
-        ("", 95.6),
-        ("spcFirstLastPara='0'", 95.6),
-        ("spcFirstLastPara='1'", 105.6),
+        ("", 96.98),
+        ("spcFirstLastPara='0'", 96.98),
+        ("spcFirstLastPara='1'", 106.98),
     ] {
         let model = parse(&typography_deck(
             "",
@@ -370,8 +370,8 @@ fn default_edge_spacing_is_suppressed_and_explicit_true_is_respected() {
 fn vertical_anchor_positions_use_measured_height_and_insets() {
     for (anchor, alignment, offset) in [
         ("t", VerticalAlignment::Top, 0.0),
-        ("ctr", VerticalAlignment::Center, 45.0),
-        ("b", VerticalAlignment::Bottom, 90.0),
+        ("ctr", VerticalAlignment::Center, 43.38),
+        ("b", VerticalAlignment::Bottom, 86.76),
     ] {
         let model = parse(&typography_deck(
             "",
@@ -384,7 +384,17 @@ fn vertical_anchor_positions_use_measured_height_and_insets() {
         assert_eq!(t.vertical_alignment, alignment);
         near(
             glyphs(&model)[0].origin.y,
-            t.rect.origin.y + 10.0 + 20.0 + offset,
+            t.rect.origin.y + 10.0 + 21.38 + offset,
+        );
+        let measured = t.measure_with_fonts(&fonts()).unwrap();
+        near(measured.height as f32, 27.24);
+        near(
+            measured.lines[0].top as f32,
+            t.rect.origin.y + 10.0 + offset,
+        );
+        near(
+            measured.lines[0].bottom as f32,
+            t.rect.origin.y + 10.0 + offset + 27.24,
         );
         no_warning(&model, "vertical anchor");
     }
@@ -466,6 +476,36 @@ fn unsupported_spacing_and_autofit_remain_structured_warnings() {
         );
     }
     assert_eq!(text(&model).paragraphs[0].runs[0].style.font_size, 20.0);
+}
+
+#[test]
+fn empty_norm_autofit_keeps_authored_font_geometry_and_scalable_baseline() {
+    let mut parts = typography_deck("", "", "anchor='ctr'", "Text");
+    let original = parse(&parts).unwrap();
+    replace(
+        &mut parts,
+        "ppt/slides/slide1.xml",
+        "<a:noAutofit/>",
+        "<a:normAutofit/>",
+    );
+    let empty = parse(&parts).unwrap();
+    assert_eq!(text(&empty), text(&original));
+    assert_eq!(glyphs(&empty), glyphs(&original));
+    assert!(
+        empty
+            .warnings()
+            .iter()
+            .any(|w| format!("{w:?}").contains("normAutofit"))
+    );
+    replace(
+        &mut parts,
+        "ppt/slides/slide1.xml",
+        "<a:normAutofit/>",
+        "<a:normAutofit fontScale='100000' lnSpcReduction='0'/>",
+    );
+    let explicit_defaults = parse(&parts).unwrap();
+    assert_eq!(text(&explicit_defaults), text(&empty));
+    assert_eq!(glyphs(&explicit_defaults), glyphs(&empty));
 }
 
 #[test]
@@ -569,8 +609,8 @@ fn inherited_spacing_between_multiple_paragraphs_and_strict_namespaces_are_suppo
     );
     let model = parse(&parts).unwrap();
     let runs = glyphs(&model);
-    // 24pt line + inherited 5pt before the second paragraph; no first-edge gap.
-    near(runs[2].origin.y - runs[0].origin.y, 29.0);
+    // Scalable 27.24pt line + inherited 5pt before the second paragraph.
+    near(runs[2].origin.y - runs[0].origin.y, 32.24);
     for (_, bytes) in &mut parts {
         if let Ok(xml) = std::str::from_utf8(bytes) {
             *bytes = xml

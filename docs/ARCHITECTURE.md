@@ -1307,3 +1307,23 @@ FontRequests; layout, DisplayList and PDF remain independent of Office names.
 No dependency, technology/permissions policy, resource/directory limit, or runtime
 font discovery changes. See [FONTS.md](FONTS.md) for naming IDs and precise ranking
 and [FIDELITY_2D.md](../compat/reports/FIDELITY_2D.md) for measurements.
+
+# Fidelity 2E — Font vertical metrics and baseline parity
+
+The pipeline remains OOXML -> effective format model -> generic layout ->
+DisplayList -> PDF. Fonts owns scalable design-unit metrics, OpenType selection,
+point normalization and a shaping report with maxima for actual selected faces.
+No font/PPTX fields were added to core glyph resources.
+
+Layout carries metrics alongside shaped fragments, combines them per line,
+distinguishes top/baseline/descent/gap/bottom, stacks paragraph boxes and anchors
+their measured height. Percentage spacing uses text size; blank end-font requests
+are generic. PPTX resolves inheritance/bodyPr/insets/end styles and exposes
+`TextBox::measure_with_fonts` for diagnostics before transforms. PDF continues
+serializing positioned baselines with no new layout policy or code changes.
+No dependencies, platform APIs or runtime processes were added.
+
+See [FONTS.md](FONTS.md), [TYPOGRAPHY.md](TYPOGRAPHY.md) and
+[FIDELITY_2E.md](../compat/reports/FIDELITY_2E.md) for policies and validation.
+Autofit and excluded typography remain deferred; older metric descriptions are
+historical.

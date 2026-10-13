@@ -386,3 +386,22 @@ metrics and MINOR_DIFFERENCE ratings. The 6/6 MINOR target is not met.
 No reference/input image, threshold, DPI, kerning, autofit, paragraph behavior,
 or effect changes are included. [FONTS.md](FONTS.md) documents canonical identity,
 recognized aliases, deterministic ties, related families, and fallback.
+
+## Fidelity 2E — Font vertical metrics and baseline parity
+
+With Fidelity 2D's same sixteen explicit local Office fonts, all six paired cases
+now rate **MINOR_DIFFERENCE**. Inputs/references, 144 DPI and block-ssim-rgb-v1
+thresholds are unchanged. All twelve slide means improve; eleven worst blocks
+improve and one is unchanged. No proprietary fonts or dependencies were added.
+
+004 slide 2: difference 0.04740273378830124 -> 0.03493550069883729; worst block
+0.755559818049309 -> 0.4454910989447289. Title vertical ink displacement decreases
+7px -> about 1px; horizontal bounds and advances are unchanged. The correction is
+generic scalable metrics and explicit baselines. Multiline body baseline and
+autofit/line-spacing limitations remain.
+
+[FIDELITY_2E.md](../compat/reports/FIDELITY_2E.md) records numerical traces, local
+metric triplets, all case/slide metrics and reproduction. Its
+[JSON companion](../compat/reports/FIDELITY_2E.json) retains full precision,
+font basenames/digests and integrity checks. Tests use existing OFL outlines and
+synthetic tables; 2D aliases, Unicode/style/wrapping and bitmap-strike fixes remain.

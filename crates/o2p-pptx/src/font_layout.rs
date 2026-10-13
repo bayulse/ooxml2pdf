@@ -74,19 +74,27 @@ impl TextBox {
         &self,
         resolver: &dyn FontResolver,
     ) -> Result<(Vec<DrawOp>, Vec<FontWarning>, bool), FontError> {
-        let paragraphs = self.layout_paragraphs();
-        let layout = o2p_layout::layout_text_box(
-            &paragraphs,
-            self.inner_rect(),
-            self.vertical_alignment,
-            resolver,
-        )?;
+        let layout = self.measure_with_fonts(resolver)?;
         let ops = layout
             .lines
             .into_iter()
             .flat_map(|line| line.runs.into_iter().map(DrawOp::GlyphText))
             .collect();
         Ok((ops, layout.warnings, layout.overflow))
+    }
+
+    /// Measure effective text in the inherited inset box. Useful for layout
+    /// diagnostics; coordinates precede the containing shape's transform.
+    pub fn measure_with_fonts(
+        &self,
+        resolver: &dyn FontResolver,
+    ) -> Result<o2p_layout::LayoutReport, FontError> {
+        o2p_layout::layout_text_box(
+            &self.layout_paragraphs(),
+            self.inner_rect(),
+            self.vertical_alignment,
+            resolver,
+        )
     }
     pub(crate) fn layout_paragraphs(&self) -> Vec<o2p_layout::Paragraph> {
         let mut paragraphs: Vec<o2p_layout::Paragraph> = self
@@ -119,6 +127,15 @@ impl TextBox {
                     TextAlignment::Right => o2p_layout::Alignment::Right,
                 },
                 empty_font_size: paragraph.end_style.font_size,
+                empty_font: FontRequest {
+                    family: paragraph
+                        .end_style
+                        .family
+                        .clone()
+                        .unwrap_or_else(|| "sans-serif".into()),
+                    weight: if paragraph.end_style.bold { 700 } else { 400 },
+                    italic: paragraph.end_style.italic,
+                },
             })
             .collect();
         if !self.include_edge_spacing {

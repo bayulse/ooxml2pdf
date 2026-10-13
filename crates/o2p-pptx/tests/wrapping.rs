@@ -209,8 +209,8 @@ fn insets_paragraphs_and_trailing_breaks_reach_generic_layout() {
     let runs = texts(&report);
     assert_eq!(runs.len(), 2);
     assert_eq!(runs[0].origin.x, 73.0);
-    assert_eq!(runs[0].origin.y, 85.0);
-    assert!((runs[1].origin.y - runs[0].origin.y - 50.4).abs() < 0.00002);
+    assert!((runs[0].origin.y - 85.69).abs() < 0.00002);
+    assert!((runs[1].origin.y - runs[0].origin.y - 57.204).abs() < 0.00002);
 }
 
 #[test]

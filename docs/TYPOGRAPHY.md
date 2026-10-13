@@ -63,9 +63,9 @@ and line-edge reshaping remain unchanged.
 `spcBef/spcAft` support `spcPts` (hundredths of a point) and `spcPct` (100,000 =
 100%, or a decimal percent string). Percentages become generic text-size multiples
 and use the largest font on the first/last line respectively. Spacing adds to
-paragraph boxes, never to the line count. Existing line metrics remain baseline
-at top + largest font size, with line height 1.2 times that size. Real font metric
-line-height selection and explicit `lnSpc` remain separate work; `lnSpc` warns.
+paragraph boxes, never to the line count. Fidelity 2E uses scalable font line metrics, described below. Percentages still
+use the largest text font size on the first/last line, independently of line
+height or bullet size. Explicit `lnSpc` remains unsupported and warns.
 
 `bodyPr@spcFirstLastPara` defaults to false: omit the first paragraph's before
 spacing and the last paragraph's after spacing at textbox edges. An inherited or
@@ -124,3 +124,45 @@ Semantic sources: [Microsoft paragraph properties](https://learn.microsoft.com/e
 [spacing points](https://learn.microsoft.com/en-us/dotnet/api/documentformat.openxml.drawing.spacingpoints),
 [spacing percentages](https://learn.microsoft.com/en-us/dotnet/api/documentformat.openxml.drawing.spacingpercent),
 and [textbox body properties](https://learn.microsoft.com/en-us/dotnet/api/documentformat.openxml.drawing.bodyproperties).
+
+## Fidelity 2E — Line boxes and explicit baselines
+
+Configured-font layout takes independent maximum ascent, descent and nonnegative
+line gap across styled fragments and every resolved fallback face. First-line
+bullets participate and share the resulting baseline, without changing text width
+or the text size used for percentage spacing. Blank paragraphs and explicit-break
+lines use resolved end-paragraph font and size (`Paragraph::empty_font` and
+`empty_font_size`).
+
+Coordinates are downward-positive points. For line top T and metrics A, D, G:
+
+- baseline = T + A;
+- font-box bottom = baseline + D;
+- line bottom = T + A + D + G;
+- line height = A + D + G.
+
+Leading follows descent; it is not split around the font box. Glyph origins are
+baselines, not line tops. `Line` exposes top, baseline, metrics, bottom, height,
+width and largest text size separately. Styles/resources/offsets remain per run.
+Ink bounds and combining-mark extents are not line-box metrics.
+
+Block height sums line heights and retained paragraph spacing. Top anchor starts
+at inner top; center at `inner_top + (inner_height - block_height) / 2`; bottom at
+`inner_top + inner_height - block_height`. Each baseline adds its line ascent.
+PPTX resolves insets first; shape transforms apply afterward. No title or font
+special case exists. The unconfigured standard-font compatibility path retains
+nominal metrics because it has no resolved scalable font resources.
+
+Empty `normAutofit` implies fontScale=100000 (100%) and lnSpcReduction=0 (0%).
+It supplies no extra scale or baseline offset in this title. Sources:
+[font scale](https://learn.microsoft.com/en-us/dotnet/api/documentformat.openxml.drawing.normalautofit.fontscale)
+and [line-space reduction](https://learn.microsoft.com/en-us/dotnet/api/documentformat.openxml.drawing.normalautofit.linespacereduction).
+General normAutofit, iterative fitting, spAutoFit and explicit line spacing remain
+deferred with existing structured warnings. Kerning, character spacing and
+wrapping-width policy are unchanged.
+
+`TextBox::measure_with_fonts` returns the generic layout report before transforms.
+The development-only `text_layout_trace` CLI example prints effective geometry,
+insets, anchor, selected metrics, block height and line/run origins. Supply the
+same explicit font flags as the compatibility adapter. Normal conversion has no
+new logging. See [Fidelity 2E evidence](../compat/reports/FIDELITY_2E.md).
