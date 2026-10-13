@@ -216,13 +216,12 @@ fn insets_paragraphs_and_trailing_breaks_reach_generic_layout() {
 #[test]
 fn unsupported_body_and_typography_remain_structured_warnings() {
     let shape = text_shape(2, TEXT_RECT,
-        "<a:p><a:pPr><a:buChar char='•'/><a:buAutoNum type='arabicPeriod'/><a:lnSpc><a:spcPct val='150000'/></a:lnSpc></a:pPr><a:r><a:rPr spc='100' u='sng' strike='sngStrike' baseline='30000'/><a:t>Unsupported styles</a:t></a:r></a:p>",
+        "<a:p><a:pPr><a:buAutoNum type='arabicPeriod'/><a:lnSpc><a:spcPct val='150000'/></a:lnSpc></a:pPr><a:r><a:rPr spc='100' u='sng' strike='sngStrike' baseline='30000'/><a:t>Unsupported styles</a:t></a:r></a:p>",
         "<a:noFill/>", "<a:ln><a:noFill/></a:ln>")
         .replace("<a:noAutofit/>", "<a:normAutofit fontScale='50000'/><a:spAutoFit/>");
     let presentation = parse(&content_deck("", &shape));
     for feature in [
         "wrapping disabled",
-        "buChar",
         "buAutoNum",
         "lnSpc",
         "@spc",

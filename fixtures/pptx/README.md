@@ -290,3 +290,14 @@ rotation/flipping), rectangle/rounded rectangle/ellipse/image outer shadows,
 theme effect references, local shadow precedence and overlapping shadow order.
 Names and package construction live in `tests/support/fidelity2b.rs`; regeneration
 uses the existing `o2p-pptx` example. See `docs/EFFECTS.md` for semantics and limits.
+
+## Fidelity 2C paragraph fixtures
+
+The Rust fixture generator also creates bullet-char, bullet-custom-char,
+bullet-custom-font, inherited-bullet, local-no-bullet, bullet-indent,
+hanging-bullet, wrapped-bullet, paragraph-space-before, paragraph-space-after,
+inherited-paragraph-spacing, centered-title-placeholder, textbox-anchor-center,
+textbox-anchor-bottom and textbox-anchor-rotated. These original synthetic
+fixtures isolate inheritance, points/percentages, signed indentation, Unicode
+font fallback and textbox anchoring; they do not replace PowerPoint references.
+See [TYPOGRAPHY.md](../../docs/TYPOGRAPHY.md).

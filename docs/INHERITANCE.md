@@ -155,3 +155,20 @@ Placeholder-role selection is also cross-checked against the primary
 [Apache POI PresentationML implementation](https://github.com/apache/poi/blob/trunk/poi-ooxml/src/main/java/org/apache/poi/xslf/usermodel/XSLFTextParagraph.java)
 (`getDefaultMasterStyle`); this establishes subtitle/body selection without
 inventing a style from the placeholder's name.
+
+## Fidelity 2C — Effective paragraph and body properties
+
+Current behavior supersedes the Fidelity 2A typography deferrals above. Character
+bullets/font requests/no-bullet, left/right margins, signed indent, before/after
+spacing and left/center/right alignment resolve per property through the same
+nine-level paragraph chain. Direct paragraphs precede slide list defaults,
+matching layout/master paragraphs and list defaults, then applicable txStyles.
+Absent properties inherit; explicit zero, buNone and buFontTx block older values.
+Unsupported numbering/image bullets warn and block inherited character bullets.
+
+Insets, t/ctr/b vertical anchor and spcFirstLastPara inherit independently through
+slide/layout/master bodyPr. An absent anchor falls back to top; absent edge spacing
+is false. Layout operates inside resolved insets before element transforms.
+Supported anchors and spacing no longer emit unsupported-feature warnings.
+Unsupported autofit, line spacing, tabs, writing modes and independent text
+rotation remain diagnosed. See [TYPOGRAPHY.md](TYPOGRAPHY.md).

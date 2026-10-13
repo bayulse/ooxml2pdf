@@ -294,3 +294,21 @@ verify embedded FontFile2, ToUnicode, ActualText and text extraction. Native
 rotation/reflection affects graphics state, never font resolution or layout.
 Independent `bodyPr@rot`, vertical writing and WordArt remain unsupported with
 structured warnings; they are distinct from the supported element transform.
+
+## Fidelity 2C — Bullets and textbox layout
+
+Configured bullets use the same FontResolver/shaper/fallback/embedding pipeline
+as ordinary runs. Core owns the generic FontRequest and Bullet; the font crate
+re-exports FontRequest for source compatibility. Unicode bullet strings and
+combining sequences remain selectable/searchable, subject to existing missing
+font/glyph diagnostics. No symbol-font character remapping or implicit Office
+font aliases are introduced.
+
+Effective paragraph margins, signed indent, spacing and vertical anchor now feed
+generic layout. Wrapped continuations align to the paragraph text margin; bullets
+paint once at the first line baseline. Before/after spacing contributes boxes,
+not extra lines. Textbox anchoring is applied after measured block height, inside
+resolved insets and before shape transforms. Existing line metrics are unchanged;
+no autofit or font shrinking is implemented. See [TYPOGRAPHY.md](TYPOGRAPHY.md)
+for the current contracts and limits. Earlier bullet/spacing/anchor deferrals in
+this document describe earlier milestones.

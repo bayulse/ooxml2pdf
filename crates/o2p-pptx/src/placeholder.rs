@@ -229,7 +229,11 @@ impl Parser<'_> {
             }
         }
         if let Some(body) = self.single(node, self.pml, "txBody")? {
-            (properties.text_levels, properties.insets) = self.body_properties(body, ancestor)?;
+            let body_defaults = self.body_properties(body, ancestor)?;
+            properties.text_levels = body_defaults.levels;
+            properties.insets = body_defaults.insets;
+            properties.anchor = body_defaults.anchor;
+            properties.edge_spacing = body_defaults.edge_spacing;
         }
         Ok(Some(Placeholder {
             kind,
@@ -297,33 +301,6 @@ impl Parser<'_> {
                     "solidFill" | "noFill" | "gradFill" | "blipFill" | "pattFill" | "grpFill"
                 )
         })
-    }
-
-    pub(super) fn paragraph_defaults(
-        &mut self,
-        ppr: Node<'_, '_>,
-    ) -> Result<PlaceholderTextDefaults, PptxError> {
-        let mut defaults = PlaceholderTextDefaults::default();
-        self.attributes(ppr, &["algn", "lvl"]);
-        self.element_only(ppr)?;
-        if let Some(value) = ppr.attribute("algn") {
-            defaults.alignment = Some(match value {
-                "l" => TextAlignment::Left,
-                "ctr" => TextAlignment::Center,
-                "r" => TextAlignment::Right,
-                _ => {
-                    self.warn("unsupported paragraph alignment: using left fallback".into());
-                    TextAlignment::Left
-                }
-            });
-        }
-        if let Some(style) = self.single(ppr, self.dml, "defRPr")? {
-            let alignment = defaults.alignment;
-            defaults = self.run_defaults(style)?;
-            defaults.alignment = alignment;
-        }
-        self.other_children(ppr, &[(self.dml, "defRPr")]);
-        Ok(defaults)
     }
 
     pub(super) fn list_style(
@@ -400,14 +377,20 @@ impl Parser<'_> {
         &mut self,
         body: Node<'_, '_>,
         ancestor: bool,
-    ) -> Result<(crate::TextListStyle, crate::text_defaults::InsetDefaults), PptxError> {
+    ) -> Result<crate::text_defaults::BodyDefaults, PptxError> {
         let mut levels = if let Some(list) = self.single(body, self.dml, "lstStyle")? {
             self.list_style(list)?
         } else {
             crate::TextListStyle::default()
         };
         let mut insets = crate::text_defaults::InsetDefaults::default();
+        let mut anchor = None;
+        let mut edge_spacing = None;
         if let Some(node) = self.single(body, self.dml, "bodyPr")? {
+            if ancestor {
+                anchor = self.body_anchor(node)?;
+            }
+            edge_spacing = self.boolean(node, "spcFirstLastPara")?;
             for (name, target) in ["lIns", "rIns", "tIns", "bIns"]
                 .into_iter()
                 .zip(&mut insets.0)
@@ -422,8 +405,21 @@ impl Parser<'_> {
                 }
             }
             if ancestor {
-                self.attributes(node, &["lIns", "rIns", "tIns", "bIns", "anchor", "wrap"]);
-                for (name, supported) in [("anchor", "t"), ("wrap", "square")] {
+                self.attributes(
+                    node,
+                    &[
+                        "lIns",
+                        "rIns",
+                        "tIns",
+                        "bIns",
+                        "anchor",
+                        "wrap",
+                        "vert",
+                        "rot",
+                        "spcFirstLastPara",
+                    ],
+                );
+                for (name, supported) in [("wrap", "square"), ("vert", "horz"), ("rot", "0")] {
                     if node.attribute(name).is_some_and(|v| v != supported) {
                         self.warn(format!(
                             "unsupported inherited bodyPr {name}: using supported textbox defaults"
@@ -475,7 +471,12 @@ impl Parser<'_> {
                 }
             }
         }
-        Ok((levels, insets))
+        Ok(crate::text_defaults::BodyDefaults {
+            levels,
+            insets,
+            anchor,
+            edge_spacing,
+        })
     }
 
     pub(super) fn placeholder_shapes(

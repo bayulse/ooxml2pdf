@@ -74,10 +74,27 @@ impl TextBox {
         &self,
         resolver: &dyn FontResolver,
     ) -> Result<(Vec<DrawOp>, Vec<FontWarning>, bool), FontError> {
-        let paragraphs: Vec<_> = self
+        let paragraphs = self.layout_paragraphs();
+        let layout = o2p_layout::layout_text_box(
+            &paragraphs,
+            self.inner_rect(),
+            self.vertical_alignment,
+            resolver,
+        )?;
+        let ops = layout
+            .lines
+            .into_iter()
+            .flat_map(|line| line.runs.into_iter().map(DrawOp::GlyphText))
+            .collect();
+        Ok((ops, layout.warnings, layout.overflow))
+    }
+    pub(crate) fn layout_paragraphs(&self) -> Vec<o2p_layout::Paragraph> {
+        let mut paragraphs: Vec<o2p_layout::Paragraph> = self
             .paragraphs
             .iter()
             .map(|paragraph| o2p_layout::Paragraph {
+                bullet: paragraph.bullet.clone(),
+                format: paragraph.format,
                 runs: paragraph
                     .runs
                     .iter()
@@ -104,31 +121,32 @@ impl TextBox {
                 empty_font_size: paragraph.end_style.font_size,
             })
             .collect();
-        let layout = o2p_layout::layout(
-            &paragraphs,
-            Rect {
-                origin: Point {
-                    x: (f64::from(self.rect.origin.x) + f64::from(self.insets.left)) as f32,
-                    y: (f64::from(self.rect.origin.y) + f64::from(self.insets.top)) as f32,
-                },
-                size: Size {
-                    width: (f64::from(self.rect.size.width)
-                        - f64::from(self.insets.left)
-                        - f64::from(self.insets.right))
-                    .max(0.0) as f32,
-                    height: (f64::from(self.rect.size.height)
-                        - f64::from(self.insets.top)
-                        - f64::from(self.insets.bottom))
-                    .max(0.0) as f32,
-                },
+        if !self.include_edge_spacing {
+            if let Some(first) = paragraphs.first_mut() {
+                first.format.space_before = Default::default();
+            }
+            if let Some(last) = paragraphs.last_mut() {
+                last.format.space_after = Default::default();
+            }
+        }
+        paragraphs
+    }
+    pub(crate) fn inner_rect(&self) -> Rect {
+        Rect {
+            origin: Point {
+                x: (f64::from(self.rect.origin.x) + f64::from(self.insets.left)) as f32,
+                y: (f64::from(self.rect.origin.y) + f64::from(self.insets.top)) as f32,
             },
-            resolver,
-        )?;
-        let ops = layout
-            .lines
-            .into_iter()
-            .flat_map(|line| line.runs.into_iter().map(DrawOp::GlyphText))
-            .collect();
-        Ok((ops, layout.warnings, layout.overflow))
+            size: Size {
+                width: (f64::from(self.rect.size.width)
+                    - f64::from(self.insets.left)
+                    - f64::from(self.insets.right))
+                .max(0.0) as f32,
+                height: (f64::from(self.rect.size.height)
+                    - f64::from(self.insets.top)
+                    - f64::from(self.insets.bottom))
+                .max(0.0) as f32,
+            },
+        }
     }
 }

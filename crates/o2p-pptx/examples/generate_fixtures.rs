@@ -22,6 +22,7 @@ fn main() -> std::io::Result<()> {
         .chain(support::style_fixtures())
         .chain(support::fidelity2a_fixtures())
         .chain(support::fidelity2b_fixtures())
+        .chain(support::fidelity2c_fixtures())
     {
         fs::write(directory.join(name), support::zip(&parts, true, false))?;
     }

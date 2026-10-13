@@ -6,10 +6,12 @@
 
 mod effects;
 mod glyph;
+mod paragraph;
 mod text;
 mod transform;
 pub use effects::{RoundedRectOp, Shadow, ShadowGeometry, ShadowOp, StrokeRoundedRectOp};
 pub use glyph::{FontResource, Glyph, GlyphRun, GlyphTextOp, ShapedText};
+pub use paragraph::{Bullet, FontRequest, ParagraphFormat, ParagraphSpacing, VerticalAlignment};
 pub use transform::Transform;
 
 /// A position in points. Negative coordinates are allowed.

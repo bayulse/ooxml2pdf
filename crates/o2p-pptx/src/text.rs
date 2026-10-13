@@ -31,12 +31,22 @@ impl Parser<'_> {
                 }
             }
         }
+        let mut vertical_alignment = inherited.and_then(|p| p.anchor).unwrap_or_default();
+        let mut include_edge_spacing = inherited.and_then(|p| p.edge_spacing).unwrap_or(false);
         let mut supported = true;
         if let Some(properties) = self.single(body, dml, "bodyPr")? {
             self.attributes(
                 properties,
                 &[
-                    "lIns", "rIns", "tIns", "bIns", "anchor", "vert", "rot", "wrap",
+                    "lIns",
+                    "rIns",
+                    "tIns",
+                    "bIns",
+                    "anchor",
+                    "vert",
+                    "rot",
+                    "wrap",
+                    "spcFirstLastPara",
                 ],
             );
             for (name, target) in [
@@ -50,8 +60,11 @@ impl Parser<'_> {
                         emu_to_points(self.integer(properties, name, 0, i64::from(i32::MAX))?);
                 }
             }
-            if properties.attribute("anchor").is_some_and(|v| v != "t") {
-                self.warn("text vertical anchor: using top alignment".into());
+            if let Some(edge_spacing) = self.boolean(properties, "spcFirstLastPara")? {
+                include_edge_spacing = edge_spacing;
+            }
+            if let Some(anchor) = self.body_anchor(properties)? {
+                vertical_alignment = anchor;
             }
             if properties.attribute("vert").is_some_and(|v| v != "horz") {
                 self.warn("vertical text: text omitted".into());
@@ -80,7 +93,7 @@ impl Parser<'_> {
         } else {
             self.warn("txBody missing bodyPr: using default text insets".into());
         }
-        let (mut levels, _) = self.body_properties(body, false)?;
+        let mut levels = self.body_properties(body, false)?.levels;
         if let Some(parent) = inherited {
             levels.inherit(&parent.text_levels);
         }
@@ -108,6 +121,8 @@ impl Parser<'_> {
         Ok(supported.then_some(TextBox {
             rect,
             insets,
+            vertical_alignment,
+            include_edge_spacing,
             paragraphs,
         }))
     }
@@ -229,6 +244,35 @@ impl Parser<'_> {
         }
         Ok((
             Paragraph {
+                bullet: defaults.bullet_char.clone().flatten().map(|glyph| {
+                    let style = runs
+                        .iter()
+                        .find(|run| !run.text.is_empty())
+                        .map(|run| &run.style)
+                        .unwrap_or(&end_style);
+                    o2p_core::Bullet {
+                        glyph,
+                        font: o2p_core::FontRequest {
+                            family: defaults
+                                .bullet_family
+                                .clone()
+                                .flatten()
+                                .or_else(|| style.family.clone())
+                                .unwrap_or_else(|| "sans-serif".into()),
+                            weight: if style.bold { 700 } else { 400 },
+                            italic: style.italic,
+                        },
+                        font_size: style.font_size,
+                        color: style.color,
+                    }
+                }),
+                format: o2p_core::ParagraphFormat {
+                    margin_left: defaults.margin_left.unwrap_or(0.0),
+                    margin_right: defaults.margin_right.unwrap_or(0.0),
+                    first_line_indent: defaults.indent.unwrap_or(0.0),
+                    space_before: defaults.space_before.unwrap_or_default(),
+                    space_after: defaults.space_after.unwrap_or_default(),
+                },
                 runs,
                 alignment,
                 end_style,
@@ -328,6 +372,7 @@ impl Parser<'_> {
             bold: Some(style.bold),
             italic: Some(style.italic),
             alignment: None,
+            ..Default::default()
         });
         let mut effective = defaults.style();
         if unavailable_color {

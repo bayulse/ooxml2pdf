@@ -2,7 +2,12 @@
 //! Fonts measure and shape; this crate chooses lines and positions them. There
 //! are no Office semantics, PDF commands, clipping, or font discovery here.
 
-use o2p_core::{Color, GlyphTextOp, Point, Rect, ShapedText};
+mod unwrapped;
+pub use unwrapped::layout_unwrapped;
+
+use o2p_core::{
+    Bullet, Color, GlyphTextOp, ParagraphFormat, Point, Rect, ShapedText, VerticalAlignment,
+};
 use o2p_fonts::{FontError, FontRequest, FontResolver, FontWarning, MAX_TEXT_BYTES};
 use std::ops::Range;
 use unicode_segmentation::UnicodeSegmentation;
@@ -31,6 +36,8 @@ pub enum Alignment {
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct Paragraph {
+    pub bullet: Option<Bullet>,
+    pub format: ParagraphFormat,
     pub runs: Vec<TextRun>,
     pub alignment: Alignment,
     /// Empty paragraphs and trailing explicit breaks occupy a line of this size.
@@ -53,6 +60,8 @@ pub struct LayoutReport {
     pub warnings: Vec<FontWarning>,
     /// Horizontal or vertical overflow. All lines remain present, without clipping.
     pub overflow: bool,
+    /// Total paragraph box height, including before/after spacing.
+    pub height: f64,
 }
 
 struct Fragment<'a> {
@@ -76,6 +85,16 @@ pub fn layout(
     bounds: Rect,
     resolver: &dyn FontResolver,
 ) -> Result<LayoutReport, FontError> {
+    layout_text_box(paragraphs, bounds, VerticalAlignment::Top, resolver)
+}
+
+/// Measure paragraphs first, then anchor their complete block in the inner box.
+pub fn layout_text_box(
+    paragraphs: &[Paragraph],
+    bounds: Rect,
+    vertical_alignment: VerticalAlignment,
+    resolver: &dyn FontResolver,
+) -> Result<LayoutReport, FontError> {
     if !bounds.origin.x.is_finite()
         || !bounds.origin.y.is_finite()
         || !bounds.size.width.is_finite()
@@ -95,11 +114,15 @@ pub fn layout(
         if paragraph.runs.len() > MAX_PARAGRAPH_BYTES {
             return Err(FontError::LimitExceeded("layout runs"));
         }
-        run_count += paragraph.runs.len();
+        run_count += paragraph.runs.len() + usize::from(paragraph.bullet.is_some());
         if run_count > MAX_TEXT_BOX_RUNS {
             return Err(FontError::LimitExceeded("layout text box runs"));
         }
-        let bytes = paragraph.runs.iter().try_fold(0usize, |sum, run| {
+        let bullet_bytes = paragraph
+            .bullet
+            .as_ref()
+            .map_or(0, |bullet| bullet.glyph.len());
+        let bytes = paragraph.runs.iter().try_fold(bullet_bytes, |sum, run| {
             sum.checked_add(run.text.len())
                 .ok_or(FontError::LimitExceeded("layout paragraph bytes"))
         })?;
@@ -110,7 +133,13 @@ pub fn layout(
         if total > MAX_TEXT_BOX_BYTES {
             return Err(FontError::LimitExceeded("layout text box bytes"));
         }
-        if !valid_size(paragraph.empty_font_size)
+        if !valid_format(paragraph.format)
+            || paragraph.bullet.as_ref().is_some_and(|b| {
+                !valid_size(b.font_size)
+                    || b.glyph.is_empty()
+                    || b.glyph.chars().any(char::is_control)
+            })
+            || !valid_size(paragraph.empty_font_size)
             || paragraph.runs.iter().any(|r| !valid_size(r.font_size))
         {
             return Err(FontError::InvalidRequest);
@@ -120,9 +149,12 @@ pub fn layout(
         lines: Vec::new(),
         warnings: Vec::new(),
         overflow: false,
+        height: 0.0,
     };
     let mut top = f64::from(bounds.origin.y);
     for paragraph in paragraphs {
+        let paragraph_start = report.lines.len();
+        let paragraph_top = top;
         let mut reshaped_bytes = 0;
         let mut hard_lines = vec![Vec::new()];
         for run in &paragraph.runs {
@@ -153,12 +185,16 @@ pub fn layout(
                 });
             }
             if source.is_empty() {
-                append_line(&mut report, Vec::new(), paragraph, bounds, &mut top)?;
+                let empty_bounds =
+                    line_bounds(bounds, paragraph, report.lines.len() == paragraph_start)?;
+                append_line(&mut report, Vec::new(), paragraph, empty_bounds, &mut top)?;
                 continue;
             }
             let atoms = atoms(&source, &fragments);
             let mut first = 0;
             while first < atoms.len() {
+                let line_bounds =
+                    line_bounds(bounds, paragraph, report.lines.len() == paragraph_start)?;
                 let start = if first == 0 { 0 } else { atoms[first - 1].end };
                 let mut last = first;
                 let mut measured = 0.0;
@@ -168,8 +204,8 @@ pub fn layout(
                     // The shaper rounds total advance to f32. Permit only its
                     // rounding error during estimation; final widths are exact.
                     let slack =
-                        f64::from(f32::EPSILON) * f64::from(bounds.size.width).max(1.0) * 4.0;
-                    if next > f64::from(bounds.size.width) + slack {
+                        f64::from(f32::EPSILON) * f64::from(line_bounds.size.width).max(1.0) * 4.0;
+                    if next > f64::from(line_bounds.size.width) + slack {
                         break;
                     }
                     measured = next;
@@ -194,7 +230,7 @@ pub fn layout(
                         &mut reshaped_bytes,
                     )?;
                     let width: f64 = runs.iter().map(|r| f64::from(r.text.advance.x)).sum();
-                    if width <= f64::from(bounds.size.width) || last == first + 1 {
+                    if width <= f64::from(line_bounds.size.width) || last == first + 1 {
                         break runs;
                     }
                     last = (first + 1..last)
@@ -202,12 +238,113 @@ pub fn layout(
                         .find(|&end| atoms[end - 1].whitespace)
                         .unwrap_or(last - 1);
                 };
-                append_line(&mut report, runs, paragraph, bounds, &mut top)?;
+                append_line(&mut report, runs, paragraph, line_bounds, &mut top)?;
                 first = last;
             }
         }
+        let first_size = report.lines[paragraph_start].height / 1.2;
+        let last_size = report
+            .lines
+            .last()
+            .map_or(first_size, |line| line.height / 1.2);
+        let before = paragraph.format.space_before.points(first_size);
+        let after = paragraph.format.space_after.points(last_size);
+        shift_lines(&mut report.lines[paragraph_start..], before)?;
+        top += before + after;
+        if let Some(bullet) = paragraph
+            .bullet
+            .as_ref()
+            .filter(|_| paragraph.runs.iter().any(|r| !r.text.is_empty()))
+        {
+            let shaped = o2p_fonts::shape(resolver, &bullet.glyph, &bullet.font, bullet.font_size)?;
+            warnings(&mut report.warnings, shaped.warnings);
+            let first = &mut report.lines[paragraph_start];
+            let bullet_x =
+                f64::from(first.baseline.x) + f64::from(paragraph.format.first_line_indent);
+            if !(bullet_x as f32).is_finite() {
+                return Err(FontError::InvalidRequest);
+            }
+            report.overflow |= bullet_x < f64::from(bounds.origin.x)
+                || bullet_x + f64::from(shaped.text.advance.x)
+                    > f64::from(bounds.origin.x) + f64::from(bounds.size.width);
+            first.runs.insert(
+                0,
+                GlyphTextOp {
+                    origin: Point {
+                        x: bullet_x as f32,
+                        y: first.baseline.y,
+                    },
+                    text: shaped.text,
+                    color: bullet.color,
+                },
+            );
+        }
+        if !top.is_finite() || top < paragraph_top || !(top as f32).is_finite() {
+            return Err(FontError::InvalidRequest);
+        }
     }
+    report.height = top - f64::from(bounds.origin.y);
+    report.overflow |= report.height > f64::from(bounds.size.height);
+    let offset = match vertical_alignment {
+        VerticalAlignment::Top => 0.0,
+        VerticalAlignment::Center => (f64::from(bounds.size.height) - report.height) / 2.0,
+        VerticalAlignment::Bottom => f64::from(bounds.size.height) - report.height,
+    };
+    shift_lines(&mut report.lines, offset)?;
     Ok(report)
+}
+
+fn shift_lines(lines: &mut [Line], offset: f64) -> Result<(), FontError> {
+    for line in lines {
+        let y = f64::from(line.baseline.y) + offset;
+        if !(y as f32).is_finite() {
+            return Err(FontError::InvalidRequest);
+        }
+        line.baseline.y = y as f32;
+        for run in &mut line.runs {
+            run.origin.y = line.baseline.y;
+        }
+    }
+    Ok(())
+}
+
+fn line_bounds(bounds: Rect, paragraph: &Paragraph, first: bool) -> Result<Rect, FontError> {
+    let format = paragraph.format;
+    let offset = f64::from(format.margin_left)
+        + if first && paragraph.bullet.is_none() {
+            f64::from(format.first_line_indent)
+        } else {
+            0.0
+        };
+    let x = f64::from(bounds.origin.x) + offset;
+    let width = (f64::from(bounds.size.width) - offset - f64::from(format.margin_right)).max(0.0);
+    if !(x as f32).is_finite() || !(width as f32).is_finite() {
+        return Err(FontError::InvalidRequest);
+    }
+    Ok(Rect {
+        origin: Point {
+            x: x as f32,
+            y: bounds.origin.y,
+        },
+        size: o2p_core::Size {
+            width: width as f32,
+            height: bounds.size.height,
+        },
+    })
+}
+
+fn valid_format(format: ParagraphFormat) -> bool {
+    format.margin_left.is_finite()
+        && format.margin_left >= 0.0
+        && format.margin_right.is_finite()
+        && format.margin_right >= 0.0
+        && format.first_line_indent.is_finite()
+        && [format.space_before, format.space_after]
+            .into_iter()
+            .all(|s| {
+                let value = s.points(1.0);
+                value.is_finite() && value >= 0.0
+            })
 }
 
 fn valid_size(size: f32) -> bool {

@@ -104,8 +104,11 @@ mod themes;
 pub use themes::*;
 mod fidelity2a;
 mod fidelity2b;
+mod fidelity2c;
 #[allow(unused_imports)]
 pub use fidelity2b::*;
+#[allow(unused_imports)]
+pub use fidelity2c::*;
 #[path = "inheritance.rs"]
 mod inheritance;
 mod styles;

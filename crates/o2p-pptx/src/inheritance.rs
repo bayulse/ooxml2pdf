@@ -60,6 +60,15 @@ pub struct PlaceholderTextDefaults {
     pub bold: Option<bool>,
     pub italic: Option<bool>,
     pub alignment: Option<TextAlignment>,
+    /// None is absent; Some(None) explicitly disables inherited bullets.
+    pub bullet_char: Option<Option<String>>,
+    /// Some(None) follows the paragraph font instead of an inherited bullet font.
+    pub bullet_family: Option<Option<String>>,
+    pub margin_left: Option<f32>,
+    pub margin_right: Option<f32>,
+    pub indent: Option<f32>,
+    pub space_before: Option<o2p_core::ParagraphSpacing>,
+    pub space_after: Option<o2p_core::ParagraphSpacing>,
 }
 impl PlaceholderTextDefaults {
     pub(crate) fn inherit(&mut self, parent: &Self) {
@@ -69,6 +78,19 @@ impl PlaceholderTextDefaults {
         self.bold = self.bold.or(parent.bold);
         self.italic = self.italic.or(parent.italic);
         self.alignment = self.alignment.or(parent.alignment);
+        self.bullet_char = self
+            .bullet_char
+            .clone()
+            .or_else(|| parent.bullet_char.clone());
+        self.bullet_family = self
+            .bullet_family
+            .clone()
+            .or_else(|| parent.bullet_family.clone());
+        self.margin_left = self.margin_left.or(parent.margin_left);
+        self.margin_right = self.margin_right.or(parent.margin_right);
+        self.indent = self.indent.or(parent.indent);
+        self.space_before = self.space_before.or(parent.space_before);
+        self.space_after = self.space_after.or(parent.space_after);
     }
     pub(crate) fn style(&self) -> TextStyle {
         let mut style = TextStyle::default();
@@ -93,6 +115,8 @@ pub(crate) struct Properties {
     pub line_color: Option<Option<Color>>,
     pub text_levels: crate::TextListStyle,
     pub insets: crate::text_defaults::InsetDefaults,
+    pub anchor: Option<o2p_core::VerticalAlignment>,
+    pub edge_spacing: Option<bool>,
     pub references: crate::styles::StyleDefaults,
 }
 impl Properties {
@@ -113,6 +137,8 @@ impl Properties {
         self.line_color = self.line_color.or(parent.line_color);
         self.text_levels.inherit(&parent.text_levels);
         self.insets.inherit(&parent.insets);
+        self.anchor = self.anchor.or(parent.anchor);
+        self.edge_spacing = self.edge_spacing.or(parent.edge_spacing);
         self.references.inherit(&parent.references);
     }
 

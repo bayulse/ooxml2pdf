@@ -3,6 +3,8 @@
 mod placeholder;
 #[path = "text.rs"]
 mod text;
+#[path = "typography.rs"]
+mod typography;
 use crate::inheritance::{Placeholder, PlaceholderTextDefaults, Source};
 use o2p_core::{ImageFormat, ImageOp, ImageResource, Point, Rect, Size, Transform};
 use o2p_ooxml::{OoxmlPackage, RelationshipTarget};

@@ -322,3 +322,27 @@ compat/.venv/bin/python compat/scripts/compat.py batch compat/references/local \
   --output-dir target/fidelity2b/paired-after-images \
   --report-dir target/fidelity2b/paired-after
 ```
+
+## Fidelity 2C paired public baseline
+
+The current public PPTX inputs are byte-identical to the source.pptx files that
+produced the correctly paired local PowerPoint references. This supersedes the
+historical mismatch described in the Fidelity 2B section above. The current
+corpus does not reproduce from the historical synthetic generator. Tooling tests
+check that generator's determinism in temporary directories and separately
+validate the current public XML/page count, without replacing benchmark inputs.
+Do not regenerate the paired public directory with the historical generator.
+
+Fidelity 2C preserves baseline commit 2b73b7b, input/reference SHA-256 digests,
+fonts, 144-DPI rasterization and block-ssim-rgb-v1 thresholds. Every slide improves
+its overall difference; localized worst blocks can increase. All six ratings
+remain MAJOR_DIFFERENCE. Warning reduction is documented separately from pixels.
+004 slide 2's difference improves 20.2%, from 0.128258 to 0.102387. Bullets,
+indentation, paragraph gaps and title vertical position improve; substituted
+font widths still produce displaced outlines and different wrap points.
+
+[FIDELITY_2C.md](../compat/reports/FIDELITY_2C.md) records per-slide difference and
+worst block, per-case overall/rating, total and typography warnings, native image
+inspection, exact commands and local artifacts. [FIDELITY_2C.json](../compat/reports/FIDELITY_2C.json)
+retains full-precision comparative measurements. Autofit remains deferred;
+[TYPOGRAPHY.md](TYPOGRAPHY.md) describes implemented semantics and corpus usage.

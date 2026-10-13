@@ -417,3 +417,24 @@ cargo test --workspace
 Use `CARGO_NET_OFFLINE=true` (or `--offline`) when running from the populated
 local dependency cache. Package inspection and rendering never need network
 access or external runtime executables.
+
+## Fidelity 2C — Paragraph, bullet and textbox alignment (complete)
+
+Baseline: clean committed 2b73b7b. Add effective DrawingML character bullets/font
+requests/no-bullet, per-property inherited margins/indent, paragraph before/after
+points and percentages, textbox edge-spacing policy and top/center/bottom anchor.
+Keep existing alignment inheritance and add centered title/body regressions.
+Core owns normalized values; both text paths delegate geometry/spacing/anchor to
+generic layout; fonts shape selectable Unicode bullets; PDF only serializes.
+Fifteen reproducible fixtures cover the milestone, including rotated anchoring.
+No dependency changes. All twelve paired slides improve in overall difference;
+004 slide 2 improves 0.128258 -> 0.102387, while its worst block rises
+0.825514 -> 0.857576. All six cases remain MAJOR_DIFFERENCE. See
+[the measurement report](../compat/reports/FIDELITY_2C.md).
+
+Full spAutoFit/normAutofit remains a separate milestone. Preserve authored sizes
+and geometry, wrapping and existing line metrics; retain structured autofit
+warnings. Font metric line boxes, broader typography and unavailable Aptos/Arial
+coverage also remain fidelity gaps. Gradients, pattern fills, extra effects,
+shapes, groups, connectors/arrows, charts, SmartArt, animation, tables, DOCX/XLSX
+and Flutter remain excluded from 2C.

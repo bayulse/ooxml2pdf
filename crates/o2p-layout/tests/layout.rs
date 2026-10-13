@@ -27,6 +27,8 @@ fn run(text: &str) -> TextRun {
 }
 fn paragraph(runs: Vec<TextRun>) -> Paragraph {
     Paragraph {
+        bullet: None,
+        format: Default::default(),
         runs,
         alignment: Alignment::Left,
         empty_font_size: 20.0,
@@ -59,6 +61,222 @@ fn line_sources(report: &LayoutReport) -> Vec<String> {
         .iter()
         .map(|l| l.runs.iter().map(|r| r.text.source.as_str()).collect())
         .collect()
+}
+
+fn near(a: f32, b: f32) {
+    assert!((a - b).abs() < 0.001, "{a} != {b}");
+}
+
+#[test]
+fn bullet_hanging_indent_and_wrapped_continuations_use_effective_geometry() {
+    let book = fonts();
+    let mut p = paragraph(vec![run("one two three four five six seven")]);
+    p.format.margin_left = 30.0;
+    p.format.margin_right = 10.0;
+    p.format.first_line_indent = -20.0;
+    p.bullet = Some(o2p_core::Bullet {
+        glyph: "•".into(),
+        font: run("").font,
+        font_size: 20.0,
+        color: Color::BLACK,
+    });
+    let report = layout(&[p], bounds(140.0, 500.0), &book).unwrap();
+    assert!(report.lines.len() > 2);
+    near(report.lines[0].runs[0].origin.x, 21.0);
+    for (index, line) in report.lines.iter().enumerate() {
+        near(line.baseline.x, 41.0);
+        assert!(line.width <= 100.0);
+        for r in line.runs.iter().skip(usize::from(index == 0)) {
+            near(r.origin.x, 41.0);
+        }
+    }
+    assert_eq!(
+        report
+            .lines
+            .iter()
+            .flat_map(|l| &l.runs)
+            .filter(|r| r.text.source == "•")
+            .count(),
+        1
+    );
+}
+
+#[test]
+fn nonbullet_first_line_indent_changes_only_the_first_line_width_and_origin() {
+    let book = fonts();
+    for indent in [-15.0, 15.0] {
+        let mut p = paragraph(vec![run("one two three four five six seven eight nine")]);
+        p.format.margin_left = 30.0;
+        p.format.first_line_indent = indent;
+        let report = layout(&[p], bounds(130.0, 500.0), &book).unwrap();
+        assert!(report.lines.len() > 1);
+        near(report.lines[0].baseline.x, 41.0 + indent);
+        for line in report.lines.iter().skip(1) {
+            near(line.baseline.x, 41.0);
+        }
+    }
+}
+
+#[test]
+fn bullets_follow_first_line_alignment_without_changing_available_text_width() {
+    for alignment in [Alignment::Left, Alignment::Center, Alignment::Right] {
+        let mut p = paragraph(vec![run("Hello")]);
+        p.alignment = alignment;
+        p.format.margin_left = 30.0;
+        p.format.first_line_indent = -20.0;
+        let plain = layout(&[p.clone()], bounds(200.0, 100.0), &fonts()).unwrap();
+        p.bullet = Some(o2p_core::Bullet {
+            glyph: "–".into(),
+            font: run("").font,
+            font_size: 20.0,
+            color: Color::BLACK,
+        });
+        let bullet = layout(&[p], bounds(200.0, 100.0), &fonts()).unwrap();
+        near(
+            bullet.lines[0].runs[0].origin.x,
+            bullet.lines[0].baseline.x - 20.0,
+        );
+        assert_eq!(bullet.lines[0].width, plain.lines[0].width);
+    }
+}
+
+#[test]
+fn paragraph_spacing_adds_boxes_without_blank_lines_or_changed_wrapping() {
+    let book = fonts();
+    let plain = paragraph(vec![run("one two three four five six")]);
+    let before = layout(&[plain.clone(), plain.clone()], bounds(120.0, 500.0), &book).unwrap();
+    let mut spaced = plain;
+    spaced.format.space_before = o2p_core::ParagraphSpacing::Points(10.0);
+    spaced.format.space_after = o2p_core::ParagraphSpacing::Points(7.0);
+    let after = layout(&[spaced.clone(), spaced], bounds(120.0, 500.0), &book).unwrap();
+    assert_eq!(line_sources(&before), line_sources(&after));
+    near(after.lines[0].baseline.y - before.lines[0].baseline.y, 10.0);
+    assert_eq!(after.height - before.height, 34.0);
+    assert!(
+        after
+            .lines
+            .iter()
+            .zip(&before.lines)
+            .all(|(a, b)| a.height == b.height && a.width == b.width)
+    );
+}
+
+#[test]
+fn percentage_spacing_uses_largest_font_on_first_and_last_lines() {
+    let mut big = run("big");
+    big.font_size = 30.0;
+    let mut p = paragraph(vec![run("small "), big, run("\nlast")]);
+    p.format.space_before = o2p_core::ParagraphSpacing::TextMultiple(0.5);
+    p.format.space_after = o2p_core::ParagraphSpacing::TextMultiple(0.25);
+    let report = layout(&[p], bounds(500.0, 500.0), &fonts()).unwrap();
+    assert_eq!(report.lines.len(), 2);
+    near(report.lines[0].baseline.y, 52.0);
+    assert_eq!(report.height, 80.0);
+}
+
+#[test]
+fn vertical_anchors_shift_entire_measured_block_and_preserve_overflow() {
+    let mut p = paragraph(vec![run("first\nsecond")]);
+    p.format.space_before = o2p_core::ParagraphSpacing::Points(10.0);
+    p.format.space_after = o2p_core::ParagraphSpacing::Points(6.0);
+    for (anchor, offset) in [
+        (o2p_core::VerticalAlignment::Top, 0.0),
+        (o2p_core::VerticalAlignment::Center, 68.0),
+        (o2p_core::VerticalAlignment::Bottom, 136.0),
+    ] {
+        let report =
+            o2p_layout::layout_text_box(&[p.clone()], bounds(200.0, 200.0), anchor, &fonts())
+                .unwrap();
+        assert_eq!(report.height, 64.0);
+        near(report.lines[0].baseline.y, 37.0 + offset);
+        near(report.lines[1].baseline.y, 61.0 + offset);
+        assert!(!report.overflow);
+    }
+    let report = o2p_layout::layout_text_box(
+        &[p],
+        bounds(200.0, 20.0),
+        o2p_core::VerticalAlignment::Bottom,
+        &fonts(),
+    )
+    .unwrap();
+    assert!(report.overflow);
+    near(report.lines[0].baseline.y, -7.0);
+}
+
+#[test]
+fn empty_bullet_paragraphs_keep_line_height_without_a_glyph() {
+    let mut p = paragraph(vec![]);
+    p.bullet = Some(o2p_core::Bullet {
+        glyph: "•".into(),
+        font: run("").font,
+        font_size: 20.0,
+        color: Color::BLACK,
+    });
+    let report = layout(&[p], bounds(100.0, 100.0), &fonts()).unwrap();
+    assert_eq!(report.height, 24.0);
+    assert!(report.lines[0].runs.is_empty());
+}
+
+#[test]
+fn malformed_geometry_spacing_bullets_and_extreme_arithmetic_are_bounded() {
+    for value in [f32::NAN, f32::INFINITY, -1.0] {
+        let mut p = paragraph(vec![run("x")]);
+        p.format.margin_left = value;
+        assert_eq!(
+            layout(&[p], bounds(100.0, 100.0), &fonts()),
+            Err(FontError::InvalidRequest)
+        );
+        let mut p = paragraph(vec![run("x")]);
+        p.format.space_before = o2p_core::ParagraphSpacing::Points(value);
+        assert_eq!(
+            layout(&[p], bounds(100.0, 100.0), &fonts()),
+            Err(FontError::InvalidRequest)
+        );
+    }
+    let mut p = paragraph(vec![run("x")]);
+    p.bullet = Some(o2p_core::Bullet {
+        glyph: "x".repeat(o2p_layout::MAX_PARAGRAPH_BYTES),
+        font: run("").font,
+        font_size: 20.0,
+        color: Color::BLACK,
+    });
+    assert!(matches!(
+        layout(&[p], bounds(100.0, 100.0), &fonts()),
+        Err(FontError::LimitExceeded(_))
+    ));
+    let mut p = paragraph(vec![run("x")]);
+    p.format.space_before = o2p_core::ParagraphSpacing::TextMultiple(f32::MAX);
+    assert_eq!(
+        layout(&[p], bounds(100.0, 100.0), &fonts()),
+        Err(FontError::InvalidRequest)
+    );
+}
+
+#[test]
+fn fixed_font_compatibility_path_keeps_generic_spacing_and_anchor_semantics() {
+    let mut p = paragraph(vec![run("first\nsecond")]);
+    p.format.margin_left = 30.0;
+    p.format.first_line_indent = -20.0;
+    p.format.space_before = o2p_core::ParagraphSpacing::Points(10.0);
+    p.format.space_after = o2p_core::ParagraphSpacing::Points(6.0);
+    p.bullet = Some(o2p_core::Bullet {
+        glyph: "•".into(),
+        font: run("").font,
+        font_size: 20.0,
+        color: Color::BLACK,
+    });
+    let (ops, overflow) = o2p_layout::layout_unwrapped(
+        &[p],
+        bounds(200.0, 200.0),
+        o2p_core::VerticalAlignment::Center,
+    );
+    assert!(!overflow);
+    assert_eq!(ops.len(), 3);
+    near(ops[0].origin.x, 21.0);
+    near(ops[1].origin.x, 41.0);
+    near(ops[2].origin.x, 41.0);
+    near(ops[0].origin.y, 105.0);
+    near(ops[2].origin.y, 129.0);
 }
 
 #[test]

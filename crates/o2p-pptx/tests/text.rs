@@ -370,7 +370,14 @@ fn unsupported_recognized_styles_emit_structured_warnings() {
     let model = model(
         "<a:p><a:pPr><a:buChar char='•'/><a:lnSpc><a:spcPct val='200000'/></a:lnSpc></a:pPr><a:r><a:t>Literal text only</a:t></a:r></a:p>",
     );
-    warning(&model, "buChar");
+    assert_eq!(
+        text_box(&model).paragraphs[0]
+            .bullet
+            .as_ref()
+            .unwrap()
+            .glyph,
+        "•"
+    );
     warning(&model, "lnSpc");
 }
 
@@ -385,7 +392,7 @@ fn body_features_warn_and_vertical_or_rotated_text_is_omitted_but_shape_survives
     );
     for (body, warning_name, rendered) in [
         ("wrap='unknown'", "text wrapping", true),
-        ("anchor='ctr'", "vertical anchor", true),
+        ("anchor='just'", "vertical anchor", true),
         ("vert='vert'", "vertical text", false),
         ("rot='60000'", "text rotation", false),
     ] {

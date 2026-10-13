@@ -229,12 +229,16 @@ class CompatibilityTests(unittest.TestCase):
         self.assertTrue(compat.is_public(compat.ROOT / "compat/corpus/public/deck.pptx"))
         self.assertNotEqual(compat.case_id(self.root / "a/deck.pptx"), compat.case_id(self.root / "b/deck.pptx"))
 
-    def test_public_corpus_is_deterministic_valid_xml_and_has_two_slides(self):
+    def test_synthetic_generator_is_deterministic_and_public_corpus_has_valid_two_slide_xml(self):
         for case in generate_corpus.cases():
             path = compat.ROOT / "compat/corpus/public" / (case[0] + ".pptx")
             before = path.read_bytes()
             generated = generate_corpus.build_deck(*case, directory=self.root / "generated")
-            self.assertEqual(generated.read_bytes(), before)
+            repeated = generate_corpus.build_deck(*case, directory=self.root / "repeated")
+            self.assertEqual(generated.read_bytes(), repeated.read_bytes())
+            # The public benchmark now contains paired PowerPoint-authored decks.
+            # Synthetic generation must not overwrite or redefine those inputs.
+            self.assertEqual(path.read_bytes(), before)
             with zipfile.ZipFile(path) as archive:
                 slides = [name for name in archive.namelist() if re_slide(name)]
                 self.assertEqual(len(slides), 2)

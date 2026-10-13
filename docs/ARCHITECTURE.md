@@ -1264,3 +1264,25 @@ Compatibility review found that the generated public inputs and local PowerPoint
 reference inputs are different presentations. The required public batch is
 unchanged; a separate correctly paired reference-input batch improves all twelve
 slides. [FIDELITY_2B.md](../compat/reports/FIDELITY_2B.md) records both sets.
+
+# Fidelity 2C — Paragraph typography
+
+The paragraph pipeline is PPTX semantics -> effective owned paragraph/textbox
+model -> generic layout -> DisplayList -> PDF. `o2p-core` adds Bullet, FontRequest,
+ParagraphFormat, ParagraphSpacing and VerticalAlignment. FontRequest moves from
+its font adapter into core and is re-exported from o2p-fonts; existing imports
+remain valid. No dependencies change. Sparse character/font/no-bullet, margin,
+indent, spacing and anchor properties extend the existing inheritance chain.
+
+Both configured-font wrapping and fixed-font explicit-break layout now live in
+o2p-layout. PPTX only maps effective text runs/geometry, resolves insets and the
+DrawingML edge-spacing policy. Generic layout shapes selectable bullets through
+o2p-fonts, positions wrapped continuations at the text margin, adds paragraph box
+spacing and anchors the measured block. PDF receives ordinary positioned text
+operations inside existing element transforms; it has no bullet/Office logic.
+Existing deterministic 1.2-times-size line metrics remain unchanged. Autofit,
+gradients and other excluded features remain deferred with warnings.
+
+See [TYPOGRAPHY.md](TYPOGRAPHY.md) for exact units, defaults, inheritance,
+unsupported behavior and validation; [FIDELITY_2C.md](../compat/reports/FIDELITY_2C.md)
+records paired before/after pixels and warnings.

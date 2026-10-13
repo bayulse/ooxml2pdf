@@ -42,3 +42,11 @@ impl InsetDefaults {
         }
     }
 }
+
+#[derive(Default)]
+pub(crate) struct BodyDefaults {
+    pub levels: TextListStyle,
+    pub insets: InsetDefaults,
+    pub anchor: Option<o2p_core::VerticalAlignment>,
+    pub edge_spacing: Option<bool>,
+}

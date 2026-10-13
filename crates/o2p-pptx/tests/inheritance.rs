@@ -680,7 +680,12 @@ fn unsupported_ancestor_semantics_warn_and_do_not_guess() {
         "<p:txStyles><p:bodyStyle/></p:txStyles></p:sldMaster>",
     );
     let model = parse(&parts).unwrap();
-    assert!(warning(&model, "gradFill") && warning(&model, "bodyPr"));
+    assert!(warning(&model, "gradFill"));
+    assert!(!warning(&model, "bodyPr"));
+    assert_eq!(
+        text(&model, 0).vertical_alignment,
+        o2p_core::VerticalAlignment::Center
+    );
     assert!(
         !model.to_display_list().pages[0]
             .ops

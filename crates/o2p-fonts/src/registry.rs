@@ -26,22 +26,7 @@ impl fmt::Display for FontError {
 }
 impl Error for FontError {}
 
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct FontRequest {
-    pub family: String,
-    /// OpenType weight, 1 through 1000 (400 regular, 700 bold).
-    pub weight: u16,
-    pub italic: bool,
-}
-impl Default for FontRequest {
-    fn default() -> Self {
-        Self {
-            family: "sans-serif".into(),
-            weight: 400,
-            italic: false,
-        }
-    }
-}
+pub use o2p_core::FontRequest;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum FontWarning {

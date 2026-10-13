@@ -274,11 +274,6 @@ impl Default for TextStyle {
         }
     }
 }
-impl TextStyle {
-    fn font(&self) -> o2p_core::Font {
-        o2p_core::Font::sans_serif(self.bold, self.italic)
-    }
-}
 
 /// Literal Unicode; newline characters represent explicit line breaks.
 #[derive(Debug, Clone, PartialEq)]
@@ -297,6 +292,8 @@ pub enum TextAlignment {
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct Paragraph {
+    pub bullet: Option<o2p_core::Bullet>,
+    pub format: o2p_core::ParagraphFormat,
     pub runs: Vec<TextRun>,
     pub alignment: TextAlignment,
     /// Used for blank paragraphs/trailing breaks; never restyles preceding runs.
@@ -324,80 +321,21 @@ impl Default for TextInsets {
 /// Shape transform and ordered paragraphs, independent of XML/PDF lifetimes.
 #[derive(Debug, Clone, PartialEq)]
 pub struct TextBox {
+    pub vertical_alignment: o2p_core::VerticalAlignment,
+    /// Include space-before/after at the outer edges of the complete text block.
+    pub include_edge_spacing: bool,
     pub rect: Rect,
     pub insets: TextInsets,
     pub paragraphs: Vec<Paragraph>,
 }
 impl TextBox {
-    /// Unwrapped lines, top aligned, with 1.2 times the largest size per line.
-    /// Returns positioned core runs and whether text exceeds the inner box.
+    /// Fixed-font compatibility layout: explicit breaks and effective paragraph
+    /// geometry/spacing/anchor are handled by the generic layout crate.
     pub(crate) fn layout(&self) -> (Vec<o2p_core::TextOp>, bool) {
-        let mut ops = vec![];
-        let mut top = f64::from(self.rect.origin.y) + f64::from(self.insets.top);
-        let left = f64::from(self.rect.origin.x) + f64::from(self.insets.left);
-        let width = (f64::from(self.rect.size.width)
-            - f64::from(self.insets.left)
-            - f64::from(self.insets.right))
-        .max(0.0);
-        let bottom = f64::from(self.rect.origin.y) + f64::from(self.rect.size.height)
-            - f64::from(self.insets.bottom);
-        let mut overflow = false;
-        for paragraph in &self.paragraphs {
-            let mut lines: Vec<Vec<(&str, &TextStyle)>> = vec![vec![]];
-            for run in &paragraph.runs {
-                for (index, segment) in run.text.split('\n').enumerate() {
-                    if index != 0 {
-                        lines.push(vec![]);
-                    }
-                    // Keep even empty segments: a break's direct size affects line height.
-                    lines
-                        .last_mut()
-                        .expect("a line always exists")
-                        .push((segment, &run.style));
-                }
-            }
-            let last_line = lines.len() - 1;
-            for (line_index, line) in lines.into_iter().enumerate() {
-                let line_size =
-                    if line_index == last_line && line.iter().all(|(text, _)| text.is_empty()) {
-                        f64::from(paragraph.end_style.font_size)
-                    } else {
-                        line.iter()
-                            .map(|(_, style)| f64::from(style.font_size))
-                            .reduce(f64::max)
-                            .unwrap_or(f64::from(paragraph.end_style.font_size))
-                    };
-
-                let line_width: f64 = line
-                    .iter()
-                    .map(|(text, style)| style.font().text_width(text, style.font_size))
-                    .sum();
-                let mut x = left
-                    + match paragraph.alignment {
-                        TextAlignment::Left => 0.0,
-                        TextAlignment::Center => (width - line_width) / 2.0,
-                        TextAlignment::Right => width - line_width,
-                    };
-                let baseline = top + line_size;
-                overflow |= line_width > width || top + line_size * 1.2 > bottom;
-                for (text, style) in line {
-                    if !text.is_empty() {
-                        ops.push(o2p_core::TextOp {
-                            origin: Point {
-                                x: x as f32,
-                                y: baseline as f32,
-                            },
-                            text: text.into(),
-                            font: style.font(),
-                            font_size: style.font_size,
-                            color: style.color,
-                        });
-                    }
-                    x += style.font().text_width(text, style.font_size);
-                }
-                top += line_size * 1.2;
-            }
-        }
-        (ops, overflow)
+        o2p_layout::layout_unwrapped(
+            &self.layout_paragraphs(),
+            self.inner_rect(),
+            self.vertical_alignment,
+        )
     }
 }

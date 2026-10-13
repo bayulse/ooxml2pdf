@@ -1,0 +1,556 @@
+{
+  "schema_version": 1,
+  "baseline_commit": "2b73b7b2cc5f2fc02bb431af949d5336f54b1eb1",
+  "after_state": "Fidelity 2C working tree",
+  "metric": {
+    "name": "block-ssim-rgb-v1",
+    "max_width": 640,
+    "blur_radius": 0.6,
+    "block_size": 8,
+    "pass_mean": 0.015,
+    "pass_worst_block": 0.15,
+    "minor_mean": 0.08,
+    "minor_worst_block": 0.6,
+    "size_tolerance_pt": 0.1
+  },
+  "dpi": 144,
+  "font_directory": "fixtures/fonts",
+  "references_unchanged": true,
+  "corpus_inputs_unchanged": true,
+  "existing_fixture_bytes_unchanged": true,
+  "primary_native_rgb_mae_before": 0.05117302799463407,
+  "primary_native_rgb_mae_after": 0.04420417082728153,
+  "cases": [
+    {
+      "case": "001-basic-shapes",
+      "input_sha256": "bd2cad631d588fee1977d2a1a4b8d7a84d6a2c0c74b0a41b3e396f1e794cbac1",
+      "reference_source_sha256": "bd2cad631d588fee1977d2a1a4b8d7a84d6a2c0c74b0a41b3e396f1e794cbac1",
+      "overall_before": 0.053252167867424524,
+      "overall_after": 0.03584928792650509,
+      "rating_before": "MAJOR_DIFFERENCE",
+      "rating_after": "MAJOR_DIFFERENCE",
+      "warnings_before": {
+        "total": 581,
+        "bullet_properties": 19,
+        "vertical_anchor": 55,
+        "paragraph_spacing": 45,
+        "indentation": 27,
+        "autofit": 37,
+        "arial_font_diagnostics": 0
+      },
+      "warnings_after": {
+        "total": 430,
+        "bullet_properties": 0,
+        "vertical_anchor": 0,
+        "paragraph_spacing": 0,
+        "indentation": 0,
+        "autofit": 37,
+        "arial_font_diagnostics": 0
+      },
+      "warning_features_removed": {
+        "{http://schemas.openxmlformats.org/drawingml/2006/main}spcBef": 10,
+        "{http://schemas.openxmlformats.org/drawingml/2006/main}buNone": 1,
+        "lvl1pPr@marL": 2,
+        "lvl1pPr@indent": 1,
+        "{http://schemas.openxmlformats.org/drawingml/2006/main}buFont": 9,
+        "{http://schemas.openxmlformats.org/drawingml/2006/main}buChar": 9,
+        "lvl2pPr@marL": 2,
+        "lvl2pPr@indent": 1,
+        "lvl3pPr@marL": 2,
+        "lvl3pPr@indent": 1,
+        "lvl4pPr@marL": 2,
+        "lvl4pPr@indent": 1,
+        "lvl5pPr@marL": 2,
+        "lvl5pPr@indent": 1,
+        "lvl6pPr@marL": 2,
+        "lvl6pPr@indent": 1,
+        "lvl7pPr@marL": 2,
+        "lvl7pPr@indent": 1,
+        "lvl8pPr@marL": 2,
+        "lvl8pPr@indent": 1,
+        "lvl9pPr@marL": 2,
+        "lvl9pPr@indent": 1,
+        "bodyPr@vert": 5,
+        "unsupported inherited bodyPr anchor: using supported textbox defaults": 4,
+        "text vertical anchor: using top alignment": 51,
+        "{http://schemas.openxmlformats.org/drawingml/2006/main}spcAft": 35
+      },
+      "warning_features_added": {},
+      "slides": [
+        {
+          "slide": 1,
+          "difference_before": 0.044895290318238225,
+          "difference_after": 0.039127038948926426,
+          "worst_block_before": 0.8233075143539728,
+          "worst_block_after": 0.8223116471617005,
+          "rating_before": "MAJOR_DIFFERENCE",
+          "rating_after": "MAJOR_DIFFERENCE",
+          "actual_pixels": [
+            1920,
+            1080
+          ],
+          "before_difference_image": "target/fidelity2c/before-images/001-basic-shapes-f2fb1341/run-yc65f266/difference-1.png",
+          "after_difference_image": "compat/outputs/public/001-basic-shapes-f2fb1341/run-a_a4hl1z/difference-1.png"
+        },
+        {
+          "slide": 2,
+          "difference_before": 0.061609045416610816,
+          "difference_after": 0.032571536904083744,
+          "worst_block_before": 0.8388512125991967,
+          "worst_block_after": 0.8319984512058003,
+          "rating_before": "MAJOR_DIFFERENCE",
+          "rating_after": "MAJOR_DIFFERENCE",
+          "actual_pixels": [
+            1920,
+            1080
+          ],
+          "before_difference_image": "target/fidelity2c/before-images/001-basic-shapes-f2fb1341/run-yc65f266/difference-2.png",
+          "after_difference_image": "compat/outputs/public/001-basic-shapes-f2fb1341/run-a_a4hl1z/difference-2.png"
+        }
+      ]
+    },
+    {
+      "case": "002-images",
+      "input_sha256": "6f4c82403bca3358ceb62b2bd2631e36fdead8c5cf73d0a8981f755233062314",
+      "reference_source_sha256": "6f4c82403bca3358ceb62b2bd2631e36fdead8c5cf73d0a8981f755233062314",
+      "overall_before": 0.03318854812807866,
+      "overall_after": 0.02494355137908371,
+      "rating_before": "MAJOR_DIFFERENCE",
+      "rating_after": "MAJOR_DIFFERENCE",
+      "warnings_before": {
+        "total": 422,
+        "bullet_properties": 19,
+        "vertical_anchor": 25,
+        "paragraph_spacing": 28,
+        "indentation": 27,
+        "autofit": 19,
+        "arial_font_diagnostics": 0
+      },
+      "warnings_after": {
+        "total": 318,
+        "bullet_properties": 0,
+        "vertical_anchor": 0,
+        "paragraph_spacing": 0,
+        "indentation": 0,
+        "autofit": 19,
+        "arial_font_diagnostics": 0
+      },
+      "warning_features_removed": {
+        "{http://schemas.openxmlformats.org/drawingml/2006/main}spcBef": 10,
+        "{http://schemas.openxmlformats.org/drawingml/2006/main}buNone": 1,
+        "lvl1pPr@marL": 2,
+        "lvl1pPr@indent": 1,
+        "{http://schemas.openxmlformats.org/drawingml/2006/main}buFont": 9,
+        "{http://schemas.openxmlformats.org/drawingml/2006/main}buChar": 9,
+        "lvl2pPr@marL": 2,
+        "lvl2pPr@indent": 1,
+        "lvl3pPr@marL": 2,
+        "lvl3pPr@indent": 1,
+        "lvl4pPr@marL": 2,
+        "lvl4pPr@indent": 1,
+        "lvl5pPr@marL": 2,
+        "lvl5pPr@indent": 1,
+        "lvl6pPr@marL": 2,
+        "lvl6pPr@indent": 1,
+        "lvl7pPr@marL": 2,
+        "lvl7pPr@indent": 1,
+        "lvl8pPr@marL": 2,
+        "lvl8pPr@indent": 1,
+        "lvl9pPr@marL": 2,
+        "lvl9pPr@indent": 1,
+        "bodyPr@vert": 5,
+        "unsupported inherited bodyPr anchor: using supported textbox defaults": 4,
+        "text vertical anchor: using top alignment": 21,
+        "{http://schemas.openxmlformats.org/drawingml/2006/main}spcAft": 18
+      },
+      "warning_features_added": {},
+      "slides": [
+        {
+          "slide": 1,
+          "difference_before": 0.03399975478132168,
+          "difference_after": 0.025773310985080733,
+          "worst_block_before": 0.8074939175334789,
+          "worst_block_after": 0.7811119324861528,
+          "rating_before": "MAJOR_DIFFERENCE",
+          "rating_after": "MAJOR_DIFFERENCE",
+          "actual_pixels": [
+            1920,
+            1080
+          ],
+          "before_difference_image": "target/fidelity2c/before-images/002-images-d2de1e92/run-4iojk86f/difference-1.png",
+          "after_difference_image": "compat/outputs/public/002-images-d2de1e92/run-v7a5kzjr/difference-1.png"
+        },
+        {
+          "slide": 2,
+          "difference_before": 0.03237734147483564,
+          "difference_after": 0.024113791773086687,
+          "worst_block_before": 0.7944063439710709,
+          "worst_block_after": 0.7871337839156793,
+          "rating_before": "MAJOR_DIFFERENCE",
+          "rating_after": "MAJOR_DIFFERENCE",
+          "actual_pixels": [
+            1920,
+            1080
+          ],
+          "before_difference_image": "target/fidelity2c/before-images/002-images-d2de1e92/run-4iojk86f/difference-2.png",
+          "after_difference_image": "compat/outputs/public/002-images-d2de1e92/run-v7a5kzjr/difference-2.png"
+        }
+      ]
+    },
+    {
+      "case": "003-text",
+      "input_sha256": "f327d67116a6c383ce3ed3787db2a94065a515f7d49f7c76a8240577a338e619",
+      "reference_source_sha256": "f327d67116a6c383ce3ed3787db2a94065a515f7d49f7c76a8240577a338e619",
+      "overall_before": 0.06963021469969527,
+      "overall_after": 0.05469267355265994,
+      "rating_before": "MAJOR_DIFFERENCE",
+      "rating_after": "MAJOR_DIFFERENCE",
+      "warnings_before": {
+        "total": 541,
+        "bullet_properties": 19,
+        "vertical_anchor": 41,
+        "paragraph_spacing": 42,
+        "indentation": 27,
+        "autofit": 32,
+        "arial_font_diagnostics": 0
+      },
+      "warnings_after": {
+        "total": 407,
+        "bullet_properties": 0,
+        "vertical_anchor": 0,
+        "paragraph_spacing": 0,
+        "indentation": 0,
+        "autofit": 32,
+        "arial_font_diagnostics": 0
+      },
+      "warning_features_removed": {
+        "{http://schemas.openxmlformats.org/drawingml/2006/main}spcBef": 10,
+        "{http://schemas.openxmlformats.org/drawingml/2006/main}buNone": 1,
+        "lvl1pPr@marL": 2,
+        "lvl1pPr@indent": 1,
+        "{http://schemas.openxmlformats.org/drawingml/2006/main}buFont": 9,
+        "{http://schemas.openxmlformats.org/drawingml/2006/main}buChar": 9,
+        "lvl2pPr@marL": 2,
+        "lvl2pPr@indent": 1,
+        "lvl3pPr@marL": 2,
+        "lvl3pPr@indent": 1,
+        "lvl4pPr@marL": 2,
+        "lvl4pPr@indent": 1,
+        "lvl5pPr@marL": 2,
+        "lvl5pPr@indent": 1,
+        "lvl6pPr@marL": 2,
+        "lvl6pPr@indent": 1,
+        "lvl7pPr@marL": 2,
+        "lvl7pPr@indent": 1,
+        "lvl8pPr@marL": 2,
+        "lvl8pPr@indent": 1,
+        "lvl9pPr@marL": 2,
+        "lvl9pPr@indent": 1,
+        "bodyPr@vert": 5,
+        "unsupported inherited bodyPr anchor: using supported textbox defaults": 4,
+        "text vertical anchor: using top alignment": 37,
+        "{http://schemas.openxmlformats.org/drawingml/2006/main}spcAft": 32
+      },
+      "warning_features_added": {},
+      "slides": [
+        {
+          "slide": 1,
+          "difference_before": 0.06766647971836591,
+          "difference_after": 0.060901542430638625,
+          "worst_block_before": 0.8461905785912138,
+          "worst_block_after": 0.8554759952605999,
+          "rating_before": "MAJOR_DIFFERENCE",
+          "rating_after": "MAJOR_DIFFERENCE",
+          "actual_pixels": [
+            1920,
+            1080
+          ],
+          "before_difference_image": "target/fidelity2c/before-images/003-text-a6004130/run-fbwp4zcr/difference-1.png",
+          "after_difference_image": "compat/outputs/public/003-text-a6004130/run-wzp2huu5/difference-1.png"
+        },
+        {
+          "slide": 2,
+          "difference_before": 0.07159394968102462,
+          "difference_after": 0.04848380467468127,
+          "worst_block_before": 0.8564222751575538,
+          "worst_block_after": 0.8576249406311092,
+          "rating_before": "MAJOR_DIFFERENCE",
+          "rating_after": "MAJOR_DIFFERENCE",
+          "actual_pixels": [
+            1920,
+            1080
+          ],
+          "before_difference_image": "target/fidelity2c/before-images/003-text-a6004130/run-fbwp4zcr/difference-2.png",
+          "after_difference_image": "compat/outputs/public/003-text-a6004130/run-wzp2huu5/difference-2.png"
+        }
+      ]
+    },
+    {
+      "case": "004-theme-layout",
+      "input_sha256": "a77cd7a020dc42352ea1a049053424878356dbf8d4fed7bea5a595853c4f5b17",
+      "reference_source_sha256": "a77cd7a020dc42352ea1a049053424878356dbf8d4fed7bea5a595853c4f5b17",
+      "overall_before": 0.08093622092003347,
+      "overall_after": 0.06412203495569223,
+      "rating_before": "MAJOR_DIFFERENCE",
+      "rating_after": "MAJOR_DIFFERENCE",
+      "warnings_before": {
+        "total": 453,
+        "bullet_properties": 19,
+        "vertical_anchor": 33,
+        "paragraph_spacing": 25,
+        "indentation": 27,
+        "autofit": 17,
+        "arial_font_diagnostics": 0
+      },
+      "warnings_after": {
+        "total": 347,
+        "bullet_properties": 0,
+        "vertical_anchor": 0,
+        "paragraph_spacing": 0,
+        "indentation": 0,
+        "autofit": 17,
+        "arial_font_diagnostics": 2
+      },
+      "warning_features_removed": {
+        "{http://schemas.openxmlformats.org/drawingml/2006/main}spcBef": 10,
+        "{http://schemas.openxmlformats.org/drawingml/2006/main}buNone": 1,
+        "lvl1pPr@marL": 2,
+        "lvl1pPr@indent": 1,
+        "{http://schemas.openxmlformats.org/drawingml/2006/main}buFont": 9,
+        "{http://schemas.openxmlformats.org/drawingml/2006/main}buChar": 9,
+        "lvl2pPr@marL": 2,
+        "lvl2pPr@indent": 1,
+        "lvl3pPr@marL": 2,
+        "lvl3pPr@indent": 1,
+        "lvl4pPr@marL": 2,
+        "lvl4pPr@indent": 1,
+        "lvl5pPr@marL": 2,
+        "lvl5pPr@indent": 1,
+        "lvl6pPr@marL": 2,
+        "lvl6pPr@indent": 1,
+        "lvl7pPr@marL": 2,
+        "lvl7pPr@indent": 1,
+        "lvl8pPr@marL": 2,
+        "lvl8pPr@indent": 1,
+        "lvl9pPr@marL": 2,
+        "lvl9pPr@indent": 1,
+        "bodyPr@vert": 5,
+        "unsupported inherited bodyPr anchor: using supported textbox defaults": 4,
+        "text vertical anchor: using top alignment": 29,
+        "{http://schemas.openxmlformats.org/drawingml/2006/main}spcAft": 15
+      },
+      "warning_features_added": {
+        "text box overflow": 1,
+        "Arial": 2
+      },
+      "slides": [
+        {
+          "slide": 1,
+          "difference_before": 0.03361446149172812,
+          "difference_after": 0.025857265704964758,
+          "worst_block_before": 0.8440567055457412,
+          "worst_block_after": 0.7955949392991419,
+          "rating_before": "MAJOR_DIFFERENCE",
+          "rating_after": "MAJOR_DIFFERENCE",
+          "actual_pixels": [
+            1920,
+            1080
+          ],
+          "before_difference_image": "target/fidelity2c/before-images/004-theme-layout-c644edfb/run-n37wdn0k/difference-1.png",
+          "after_difference_image": "compat/outputs/public/004-theme-layout-c644edfb/run-hthz9u27/difference-1.png"
+        },
+        {
+          "slide": 2,
+          "difference_before": 0.12825798034833882,
+          "difference_after": 0.1023868042064197,
+          "worst_block_before": 0.8255137948859304,
+          "worst_block_after": 0.8575758354688509,
+          "rating_before": "MAJOR_DIFFERENCE",
+          "rating_after": "MAJOR_DIFFERENCE",
+          "actual_pixels": [
+            1920,
+            1080
+          ],
+          "before_difference_image": "target/fidelity2c/before-images/004-theme-layout-c644edfb/run-n37wdn0k/difference-2.png",
+          "after_difference_image": "compat/outputs/public/004-theme-layout-c644edfb/run-hthz9u27/difference-2.png"
+        }
+      ]
+    },
+    {
+      "case": "005-transforms",
+      "input_sha256": "a918e006415a58b2c3809bf2d4be3fe01f4ed71192cea29db5b8d4b72fb7f94d",
+      "reference_source_sha256": "a918e006415a58b2c3809bf2d4be3fe01f4ed71192cea29db5b8d4b72fb7f94d",
+      "overall_before": 0.03327533631911516,
+      "overall_after": 0.023187319868530162,
+      "rating_before": "MAJOR_DIFFERENCE",
+      "rating_after": "MAJOR_DIFFERENCE",
+      "warnings_before": {
+        "total": 524,
+        "bullet_properties": 19,
+        "vertical_anchor": 49,
+        "paragraph_spacing": 38,
+        "indentation": 27,
+        "autofit": 30,
+        "arial_font_diagnostics": 0
+      },
+      "warnings_after": {
+        "total": 386,
+        "bullet_properties": 0,
+        "vertical_anchor": 0,
+        "paragraph_spacing": 0,
+        "indentation": 0,
+        "autofit": 30,
+        "arial_font_diagnostics": 0
+      },
+      "warning_features_removed": {
+        "{http://schemas.openxmlformats.org/drawingml/2006/main}spcBef": 10,
+        "{http://schemas.openxmlformats.org/drawingml/2006/main}buNone": 1,
+        "lvl1pPr@marL": 2,
+        "lvl1pPr@indent": 1,
+        "{http://schemas.openxmlformats.org/drawingml/2006/main}buFont": 9,
+        "{http://schemas.openxmlformats.org/drawingml/2006/main}buChar": 9,
+        "lvl2pPr@marL": 2,
+        "lvl2pPr@indent": 1,
+        "lvl3pPr@marL": 2,
+        "lvl3pPr@indent": 1,
+        "lvl4pPr@marL": 2,
+        "lvl4pPr@indent": 1,
+        "lvl5pPr@marL": 2,
+        "lvl5pPr@indent": 1,
+        "lvl6pPr@marL": 2,
+        "lvl6pPr@indent": 1,
+        "lvl7pPr@marL": 2,
+        "lvl7pPr@indent": 1,
+        "lvl8pPr@marL": 2,
+        "lvl8pPr@indent": 1,
+        "lvl9pPr@marL": 2,
+        "lvl9pPr@indent": 1,
+        "bodyPr@vert": 5,
+        "unsupported inherited bodyPr anchor: using supported textbox defaults": 4,
+        "text vertical anchor: using top alignment": 45,
+        "{http://schemas.openxmlformats.org/drawingml/2006/main}spcAft": 28
+      },
+      "warning_features_added": {},
+      "slides": [
+        {
+          "slide": 1,
+          "difference_before": 0.03393507311355712,
+          "difference_after": 0.021867620674805074,
+          "worst_block_before": 0.8005179204642714,
+          "worst_block_after": 0.7999911387768075,
+          "rating_before": "MAJOR_DIFFERENCE",
+          "rating_after": "MAJOR_DIFFERENCE",
+          "actual_pixels": [
+            1920,
+            1080
+          ],
+          "before_difference_image": "target/fidelity2c/before-images/005-transforms-e17aeca9/run-fqrcsfv4/difference-1.png",
+          "after_difference_image": "compat/outputs/public/005-transforms-e17aeca9/run-e9cddu5l/difference-1.png"
+        },
+        {
+          "slide": 2,
+          "difference_before": 0.0326155995246732,
+          "difference_after": 0.024507019062255248,
+          "worst_block_before": 0.7796562173326189,
+          "worst_block_after": 0.7526331220592346,
+          "rating_before": "MAJOR_DIFFERENCE",
+          "rating_after": "MAJOR_DIFFERENCE",
+          "actual_pixels": [
+            1920,
+            1080
+          ],
+          "before_difference_image": "target/fidelity2c/before-images/005-transforms-e17aeca9/run-fqrcsfv4/difference-2.png",
+          "after_difference_image": "compat/outputs/public/005-transforms-e17aeca9/run-e9cddu5l/difference-2.png"
+        }
+      ]
+    },
+    {
+      "case": "006-style-matrix",
+      "input_sha256": "bfc9a0f105debf7c49e6b2aa6590e981b7418471ba7341891026b5da184998bc",
+      "reference_source_sha256": "bfc9a0f105debf7c49e6b2aa6590e981b7418471ba7341891026b5da184998bc",
+      "overall_before": 0.03130642825144852,
+      "overall_after": 0.023118372606834532,
+      "rating_before": "MAJOR_DIFFERENCE",
+      "rating_after": "MAJOR_DIFFERENCE",
+      "warnings_before": {
+        "total": 549,
+        "bullet_properties": 19,
+        "vertical_anchor": 52,
+        "paragraph_spacing": 41,
+        "indentation": 27,
+        "autofit": 33,
+        "arial_font_diagnostics": 0
+      },
+      "warnings_after": {
+        "total": 405,
+        "bullet_properties": 0,
+        "vertical_anchor": 0,
+        "paragraph_spacing": 0,
+        "indentation": 0,
+        "autofit": 33,
+        "arial_font_diagnostics": 0
+      },
+      "warning_features_removed": {
+        "{http://schemas.openxmlformats.org/drawingml/2006/main}spcBef": 10,
+        "{http://schemas.openxmlformats.org/drawingml/2006/main}buNone": 1,
+        "lvl1pPr@marL": 2,
+        "lvl1pPr@indent": 1,
+        "{http://schemas.openxmlformats.org/drawingml/2006/main}buFont": 9,
+        "{http://schemas.openxmlformats.org/drawingml/2006/main}buChar": 9,
+        "lvl2pPr@marL": 2,
+        "lvl2pPr@indent": 1,
+        "lvl3pPr@marL": 2,
+        "lvl3pPr@indent": 1,
+        "lvl4pPr@marL": 2,
+        "lvl4pPr@indent": 1,
+        "lvl5pPr@marL": 2,
+        "lvl5pPr@indent": 1,
+        "lvl6pPr@marL": 2,
+        "lvl6pPr@indent": 1,
+        "lvl7pPr@marL": 2,
+        "lvl7pPr@indent": 1,
+        "lvl8pPr@marL": 2,
+        "lvl8pPr@indent": 1,
+        "lvl9pPr@marL": 2,
+        "lvl9pPr@indent": 1,
+        "bodyPr@vert": 5,
+        "unsupported inherited bodyPr anchor: using supported textbox defaults": 4,
+        "text vertical anchor: using top alignment": 48,
+        "{http://schemas.openxmlformats.org/drawingml/2006/main}spcAft": 31
+      },
+      "warning_features_added": {},
+      "slides": [
+        {
+          "slide": 1,
+          "difference_before": 0.03278706173873364,
+          "difference_after": 0.024815015177990656,
+          "worst_block_before": 0.7655048289883974,
+          "worst_block_after": 0.7717628249203634,
+          "rating_before": "MAJOR_DIFFERENCE",
+          "rating_after": "MAJOR_DIFFERENCE",
+          "actual_pixels": [
+            1920,
+            1080
+          ],
+          "before_difference_image": "target/fidelity2c/before-images/006-style-matrix-edc750c5/run-h5k57fpr/difference-1.png",
+          "after_difference_image": "compat/outputs/public/006-style-matrix-edc750c5/run-mroiftt6/difference-1.png"
+        },
+        {
+          "slide": 2,
+          "difference_before": 0.02982579476416339,
+          "difference_after": 0.021421730035678408,
+          "worst_block_before": 0.7274459087008411,
+          "worst_block_after": 0.6422432658555243,
+          "rating_before": "MAJOR_DIFFERENCE",
+          "rating_after": "MAJOR_DIFFERENCE",
+          "actual_pixels": [
+            1920,
+            1080
+          ],
+          "before_difference_image": "target/fidelity2c/before-images/006-style-matrix-edc750c5/run-h5k57fpr/difference-2.png",
+          "after_difference_image": "compat/outputs/public/006-style-matrix-edc750c5/run-mroiftt6/difference-2.png"
+        }
+      ]
+    }
+  ]
+}
