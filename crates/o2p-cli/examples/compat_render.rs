@@ -1,5 +1,6 @@
 //! Development adapter for compat/scripts/compat.py. Never linked into o2p or libraries.
-use std::{env, error::Error, fs, path::PathBuf, process::ExitCode, time::Instant};
+use o2p_fonts::{FontBook, FontError, FontRequest, FontResolution, FontResolver, FontSelection};
+use std::{cell::RefCell, env, error::Error, fs, path::PathBuf, process::ExitCode, time::Instant};
 
 use o2p_pptx::{PptxWarning, TextLayoutWarningKind};
 
@@ -28,6 +29,41 @@ fn warning(kind: &str, feature: &str, location: &str, message: &str) -> String {
     )
 }
 
+struct ResolutionTrace<'a> {
+    book: &'a FontBook,
+    entries: RefCell<Vec<FontResolution>>,
+}
+impl FontResolver for ResolutionTrace<'_> {
+    fn resolve(&self, request: &FontRequest, cluster: &str) -> Result<FontSelection, FontError> {
+        let selection = self.book.resolve(request, cluster)?;
+        let entry = selection.diagnostic(request);
+        let mut entries = self.entries.borrow_mut();
+        if !entries.contains(&entry) {
+            entries.push(entry);
+        }
+        Ok(selection)
+    }
+}
+
+fn resolution(value: &FontResolution) -> String {
+    format!(
+        "{{\"requested_family\":{},\"requested_weight\":{},\"requested_italic\":{},\"resolved_family\":{},\"resolved_subfamily\":{},\"resolved_weight\":{},\"resolved_italic\":{},\"full_name\":{},\"postscript_name\":{}}}",
+        quoted(&value.requested.family),
+        value.requested.weight,
+        value.requested.italic,
+        quoted(&value.resolved_family),
+        quoted(&value.resolved_subfamily),
+        value.resolved_weight,
+        value.resolved_italic,
+        value
+            .full_name
+            .as_deref()
+            .map(quoted)
+            .unwrap_or_else(|| "null".into()),
+        quoted(&value.postscript_name)
+    )
+}
+
 fn parser_warning(value: &PptxWarning) -> String {
     let (kind, feature, location) = match value {
         PptxWarning::UnsupportedTheme { part, name } => {
@@ -52,6 +88,7 @@ fn convert(
     args: &[std::ffi::OsString],
     warnings: &mut Vec<String>,
     pages: &mut Vec<String>,
+    resolutions: &mut Vec<String>,
 ) -> Result<(), Box<dyn Error>> {
     let package = o2p_ooxml::OoxmlPackage::open(&args[0], o2p_ooxml::SecurityLimits::default())?;
     let presentation =
@@ -87,7 +124,13 @@ fn convert(
             }
         }
         book.set_fallback_families(fallbacks);
-        let layout = presentation.to_display_list_with_fonts(&book)?;
+        let trace = ResolutionTrace {
+            book: &book,
+            entries: RefCell::new(Vec::new()),
+        };
+        let result = presentation.to_display_list_with_fonts(&trace);
+        resolutions.extend(trace.entries.into_inner().iter().map(resolution));
+        let layout = result?;
         for value in layout.warnings {
             let (kind, feature) = match &value.kind {
                 TextLayoutWarningKind::Overflow => ("Overflow", "text box overflow".to_owned()),
@@ -141,18 +184,20 @@ fn main() -> ExitCode {
     let start = Instant::now();
     let mut warnings = Vec::new();
     let mut pages = Vec::new();
-    let result = convert(&args, &mut warnings, &mut pages);
+    let mut resolutions = Vec::new();
+    let result = convert(&args, &mut warnings, &mut pages, &mut resolutions);
     let error = result
         .as_ref()
         .err()
         .map(|e| quoted(&e.to_string()))
         .unwrap_or_else(|| "null".into());
     let json = format!(
-        "{{\"engine_version\":{},\"render_duration_seconds\":{},\"pages\":[{}],\"warnings\":[{}],\"error\":{}}}\n",
+        "{{\"engine_version\":{},\"render_duration_seconds\":{},\"pages\":[{}],\"warnings\":[{}],\"font_resolutions\":[{}],\"error\":{}}}\n",
         quoted(env!("CARGO_PKG_VERSION")),
         start.elapsed().as_secs_f64(),
         pages.join(","),
         warnings.join(","),
+        resolutions.join(","),
         error
     );
     if let Err(error) = fs::write(PathBuf::from(&args[2]), json) {

@@ -34,7 +34,7 @@ class CompatibilityTests(unittest.TestCase):
         compat.write_json(ref / "reference.json", dict(renderer="Test renderer (not Office)", version="1", pages=pages))
         return ref
 
-    def run_case(self, reference=None, render_error=False, page_count=1):
+    def run_case(self, reference=None, render_error=False, page_count=1, legacy_adapter=False):
         input_file = self.root / "input.pptx"
         input_file.write_bytes(b"test input")
         adapter = self.root / "adapter"
@@ -44,8 +44,14 @@ class CompatibilityTests(unittest.TestCase):
             if command[0] == adapter:
                 compat.write_json(Path(command[3]), dict(engine_version="test", render_duration_seconds=0.125,
                     pages=[dict(width_pt=960, height_pt=540)] * page_count,
+                    font_resolutions=[dict(requested_family="Example Display", resolved_family="Example Display",
+                        resolved_weight=400, resolved_italic=False, postscript_name="ExampleDisplay")],
                     warnings=[dict(kind="UnsupportedSlideContent", feature="gradFill", location="ppt/slides/slide1.xml", message="unsupported gradient")],
                     error="malformed input" if render_error else None))
+                if legacy_adapter:
+                    telemetry = json.loads(Path(command[3]).read_text())
+                    del telemetry["font_resolutions"]
+                    compat.write_json(Path(command[3]), telemetry)
                 if render_error:
                     raise compat.EvaluationError("malformed input")
                 Path(command[2]).write_bytes(b"pdf")
@@ -64,6 +70,11 @@ class CompatibilityTests(unittest.TestCase):
              patch.object(compat, "execute", side_effect=fake_execute):
             return compat.check(input_file, self.root / "output", reference, adapter=adapter)
 
+    def test_legacy_adapter_without_font_resolutions_remains_supported(self):
+        result = self.run_case(self.reference(), legacy_adapter=True)
+        self.assertEqual(result["overall_rating"], "PASS")
+        self.assertEqual(result["font_resolutions"], [])
+
     def test_report_serialization_and_render_telemetry(self):
         result = self.run_case(self.reference())
         serialized = json.loads((self.root / "output/result.json").read_text())
@@ -73,6 +84,8 @@ class CompatibilityTests(unittest.TestCase):
         self.assertEqual(result["render_duration_seconds"], 0.125)
         self.assertEqual(result["engine"]["commit"], "baseline")
         self.assertIn("gradFill", (self.root / "output/report.md").read_text())
+        self.assertEqual(result["font_resolutions"][0]["requested_family"], "Example Display")
+        self.assertEqual(result["font_resolutions"][0]["postscript_name"], "ExampleDisplay")
 
     def test_warning_aggregation_by_kind_feature_and_location(self):
         a = dict(kind="UnsupportedSlideContent", feature="gradFill", location="slide1")
@@ -257,6 +270,12 @@ class CompatibilityTests(unittest.TestCase):
         subprocess.run([str(cli), "convert", str(input_file), "-o", str(self.root / "cli.pdf"), *font_args], check=True, capture_output=True)
         self.assertEqual((self.root / "adapter.pdf").read_bytes(), (self.root / "cli.pdf").read_bytes())
         self.assertEqual(len(json.loads((self.root / "telemetry.json").read_text())["pages"]), 2)
+        resolutions = json.loads((self.root / "telemetry.json").read_text())["font_resolutions"]
+        self.assertTrue(resolutions)
+        self.assertTrue(all({"requested_family", "resolved_family", "resolved_subfamily",
+            "resolved_weight", "resolved_italic", "postscript_name", "full_name"} <= entry.keys()
+            for entry in resolutions))
+        self.assertEqual(len(resolutions), len({json.dumps(entry, sort_keys=True) for entry in resolutions}))
 
     def test_real_poppler_pipeline_self_check_not_office(self):
         adapter = compat.ROOT / "target/debug/examples/compat_render"

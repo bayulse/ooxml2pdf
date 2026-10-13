@@ -438,3 +438,22 @@ warnings. Font metric line boxes, broader typography and unavailable Aptos/Arial
 coverage also remain fidelity gaps. Gradients, pattern fills, extra effects,
 shapes, groups, connectors/arrows, charts, SmartArt, animation, tables, DOCX/XLSX
 and Flutter remain excluded from 2C.
+
+
+## Fidelity 2D — Exact font-family identity and alias-aware resolution (implemented)
+
+Baseline: clean committed 11bd2e4. Preserve distinct canonical rendering families
+and localized metadata aliases. Canonical matches precede aliases and style
+selection; ties use family, PostScript name, and bytes rather than registration
+order. Keep configured fallback order, Unicode cluster coverage, outline-font
+acceptance, and resource/directory limits. Add owned successful-resolution
+diagnostics and development compatibility telemetry. No dependencies or Microsoft
+font assets are added.
+
+Local validation proves normal Aptos and Aptos Display coexist and embed
+independently. 004 slide 2 difference improves 0.054861 -> 0.047403; worst block
+0.892814 -> 0.755560. Five cases remain unchanged at MINOR_DIFFERENCE; 004 remains
+MAJOR_DIFFERENCE with a residual vertical title displacement. The six-case target
+is not reached. See [FIDELITY_2D.md](../compat/reports/FIDELITY_2D.md). Stop at
+correct family identity: kerning, normAutofit/spAutoFit, additional paragraph
+semantics, effects, discovery, DOCX/XLSX and Flutter remain separate work.

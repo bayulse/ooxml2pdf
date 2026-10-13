@@ -362,3 +362,27 @@ Overall difference improves from 0.0358493 to 0.0191826, worst block from
 0.8319985 to 0.4580673, and the case rating from MAJOR_DIFFERENCE to
 MINOR_DIFFERENCE. Fixture-font metrics reproduce the Fidelity 2C baseline exactly;
 inputs, references, DPI and thresholds remain unchanged.
+
+
+## Fidelity 2D — Exact font-family identity and alias-aware resolution
+
+The development adapter and per-case result JSON now include `font_resolutions`,
+a deduplicated first-use list of requested family/weight/italic and resolved
+canonical family/subfamily/weight/italic, full name, and selected PostScript name.
+These are diagnostics, not warnings or rating inputs. Font bytes, paths, and
+source text are not included in the entries. Existing adapters without this field
+remain supported and yield an empty list. `Substitution` warnings still identify
+requested and selected families; successful exact matches remain quiet.
+
+[The Fidelity 2D report](../compat/reports/FIDELITY_2D.md) uses clean commit
+11bd2e4, a preserved baseline adapter, and the same explicitly registered local
+Office faces before/after. Aptos Display now embeds alongside normal Aptos in
+004-theme-layout. Slide 2 difference improves 0.054861 -> 0.047403 and worst block
+0.892814 -> 0.755560. Title horizontal bounds almost match the reference, while
+a seven-pixel vertical displacement remains at native resolution. Case 004
+remains MAJOR_DIFFERENCE; the other five cases retain their exact baseline
+metrics and MINOR_DIFFERENCE ratings. The 6/6 MINOR target is not met.
+
+No reference/input image, threshold, DPI, kerning, autofit, paragraph behavior,
+or effect changes are included. [FONTS.md](FONTS.md) documents canonical identity,
+recognized aliases, deterministic ties, related families, and fallback.

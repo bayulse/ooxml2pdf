@@ -1288,3 +1288,22 @@ gradients and other excluded features remain deferred with warnings.
 See [TYPOGRAPHY.md](TYPOGRAPHY.md) for exact units, defaults, inheritance,
 unsupported behavior and validation; [FIDELITY_2C.md](../compat/reports/FIDELITY_2C.md)
 records paired before/after pixels and warnings.
+
+
+# Fidelity 2D — Exact font-family identity and alias-aware resolution
+
+The existing o2p-fonts adapter now owns localized OpenType name records and
+separates canonical rendering family (WWS, legacy, then typographic) from
+recognized metadata aliases. The bounded face vector remains; overlapping aliases
+do not merge canonical families. Matching ranks canonical identity before alias
+and style, with deterministic family/PostScript/content ties. Caller-configured
+fallback order and whole-grapheme coverage remain intact.
+
+A FontSelection can produce owned FontResolution diagnostics. The development
+compatibility adapter wraps FontResolver to collect distinct first-use resolutions
+without adding logging, mutable state, or telemetry to the runtime registry.
+PPTX continues resolving theme tokens and inheritance before making generic
+FontRequests; layout, DisplayList and PDF remain independent of Office names.
+No dependency, technology/permissions policy, resource/directory limit, or runtime
+font discovery changes. See [FONTS.md](FONTS.md) for naming IDs and precise ranking
+and [FIDELITY_2D.md](../compat/reports/FIDELITY_2D.md) for measurements.

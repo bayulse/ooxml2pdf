@@ -17,10 +17,12 @@ the `FontResolver` trait with validated `FontFace` instances.
 `FontRequest` contains family, OpenType weight (1–1000), and italic style.
 Matching uses trimmed, case-insensitive family names. Selection order is:
 
-1. Requested family, ranked by matching italic style, nearest weight, then
-   registration order. Prefer a face covering the complete grapheme cluster.
-2. Explicit configured compatible family aliases, in configured order.
-3. Explicit configured fallback families, in configured order and style rank.
+1. Requested canonical family identity, then recognized metadata aliases.
+   Within each match strength, prefer matching italic style and nearest weight.
+   Prefer a face covering the complete grapheme cluster.
+2. Explicit configured compatible families, in configured order, using the same
+   canonical/metadata-alias and style ranking.
+3. Explicit configured fallback families, in configured order and the same rank.
 4. If none covers the cluster, use the first eligible face's `.notdef` glyph
    and emit `MissingGlyph`. If no eligible face exists, return `NoFonts`.
 
@@ -93,6 +95,82 @@ and PDF serialization remain unchanged. The legacy `to_display_list()` API and
 CLI without explicit font configuration retain the historical standard-font,
 unwrapped behavior. Use `to_display_list_with_fonts()` or CLI `--font` /
 `--font-dir` to obtain Unicode shaping and wrapping.
+
+### Fidelity 2D — Exact font-family identity and alias-aware resolution
+
+The registry keeps immutable faces in a bounded vector, not a bucket that merges
+families with overlapping names. Registration preserves caller order and sorted
+directory scanning; lookup ties no longer depend on registration order.
+
+`FontMetadata::family` is the canonical **rendering** family. The adapter chooses
+OpenType WWS family ID 21, otherwise legacy family ID 1, otherwise typographic
+family ID 16. Typographic families can group several distinct design/four-style
+families: ID 16 is not always the exact family a document requests. For example,
+a face with ID 1 = "Example Display", ID 16 = "Example", and ID 17 = "Display"
+keeps "Example Display" as its rendering identity and "Example" as an alias.
+WWS naming, when provided, supplies the family grouped by weight/width/slope.
+See the [OpenType name specification](https://learn.microsoft.com/en-us/typography/opentype/spec/name).
+This is generic metadata handling, with no vendor, prefix, suffix, or style-word
+inference.
+
+`family_aliases` preserves all distinct decoded family strings from IDs 1, 16,
+and 21, including localized names and the canonical spelling. `names` retains
+decoded localized records for IDs 1/2 (legacy family/subfamily), 16/17
+(typographic family/subfamily), 21/22 (WWS family/subfamily), 4 (full name),
+and 6 (PostScript name), with numeric platform/encoding/language IDs.
+`subfamily` follows the selected family's corresponding ID, with 17 then 2 as
+fallbacks. `full_name` and `postscript_name` identify faces; they do not become
+family aliases. OS/2 weight and italic flags remain authoritative for style
+selection; subfamily strings are descriptive.
+
+The existing ttf-parser adapter decodes Unicode-platform and supported Windows
+Unicode records; unsupported encodings, invalid UTF-16, empty/whitespace-only
+names, and names exceeding 256 UTF-8 bytes are omitted. Encoded strings exceeding
+512 bytes are rejected before decoding. No new legacy-encoding decoder is added.
+For each chosen ID, preferred spelling is Windows en-US, other Windows English,
+Unicode platform, then remaining records. Ties compare numeric language,
+platform, encoding, then the decoded string. Record and alias ordering is stable
+and does not depend on name-table enumeration or machine locale.
+
+Matching retains trimmed Unicode lowercase keys, without fuzzy matching or
+prefix matching. Canonical strength wins before style ranking, so a regular
+"Example" face outranks a bold "Example Display" face that aliases "Example"
+when resolving "Example". "Example Display", "Example Narrow", and "Example
+Text" remain separate unless explicit metadata or configured substitutions
+establish a matching relationship.
+
+Equal strength/style/weight candidates compare normalized canonical family,
+original canonical spelling, PostScript name, then complete font bytes
+lexicographically. Byte comparison is only the final tie-break, introduces no
+hash collisions or dependency, and does not expose contents. Byte-identical
+duplicates are observationally equivalent. Thus the same eligible set selects
+the same face in either registration order.
+
+Whole-grapheme coverage still applies: if canonical faces cannot cover a cluster,
+metadata aliases, configured substitutes, then fallbacks can supply it.
+Configured family/fallback list order remains intentional; the CLI's default
+fallback list still uses distinct registered canonical families in registration
+order. No broad fallback priority or platform discovery is added.
+`MissingFont` now means neither canonical identity nor metadata alias exists.
+An alias resolving to a different canonical family still reports `Substitution`
+with requested and selected names; style approximation and coverage fallback
+retain their existing warnings. Successful exact family/style matches are quiet.
+
+`FontSelection::diagnostic(&request)` returns owned `FontResolution` metadata:
+requested family/weight/italic, resolved canonical family/subfamily/weight/italic,
+full name, and selected PostScript name. It is separate from warnings and works
+with custom resolvers. The development compatibility adapter records distinct
+resolutions in first-use order as `font_resolutions` in telemetry and result JSON.
+It records no source text, font bytes, or font file paths. Shaping/layout/PDF
+reports and the DisplayList are unchanged.
+
+Synthetic name-table tests use existing OFL outlines to exercise overlapping
+families, all four styles, reversed registration, multilingual aliases, WWS and
+typographic-only names, equal-name content ties, and Unicode coverage fallback.
+No Microsoft font files or new dependencies are added. Existing O2P font,
+glyf/loca with EBDT/EBLC, permissions, and directory/resource-limit tests remain.
+The [Fidelity 2D report](../compat/reports/FIDELITY_2D.md) records local Office
+validation and the remaining title-layout difference.
 
 ## Measured line layout (Milestone 1G-B)
 

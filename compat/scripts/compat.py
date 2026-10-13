@@ -257,6 +257,7 @@ def check(input_file, output_dir, reference_dir=None, font_args=(), adapter=None
             if telemetry.exists():
                 render = json.loads(telemetry.read_text())
                 result["warnings"] = render["warnings"]
+                result["font_resolutions"] = render.get("font_resolutions", [])
                 result["pages"] = render["pages"]
                 result["slide_count"] = len(render["pages"])
                 result["engine"]["engine_version"] = render["engine_version"]

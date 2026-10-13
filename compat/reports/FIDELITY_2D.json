@@ -1,0 +1,552 @@
+{
+  "milestone": "Fidelity 2D \u2014 Exact font-family identity and alias-aware resolution",
+  "baseline_commit": "11bd2e4322a920129efc5c6d0d05b1b276a35964",
+  "dpi": 144,
+  "metric": {
+    "name": "block-ssim-rgb-v1",
+    "max_width": 640,
+    "blur_radius": 0.6,
+    "block_size": 8,
+    "pass_mean": 0.015,
+    "pass_worst_block": 0.15,
+    "minor_mean": 0.08,
+    "minor_worst_block": 0.6,
+    "size_tolerance_pt": 0.1
+  },
+  "font_configuration": [
+    {
+      "name": "Aptos-Bold-Italic.ttf",
+      "sha256": "7d7ba35b867c5873274466c743a9812c7bca1a0828f137f7697ae311664f41b9"
+    },
+    {
+      "name": "Aptos-Bold.ttf",
+      "sha256": "cf4b35ac6d81e0eb42ffa44c3829b710c058de6fa3cf2c7cdad0407e22538877"
+    },
+    {
+      "name": "Aptos-Italic.ttf",
+      "sha256": "888909eceb9acd84157078cc097c11f8a94a34ff3bd3fe08194ce7866f5998d1"
+    },
+    {
+      "name": "Aptos-SemiBold.ttf",
+      "sha256": "5aca9b5319c39f0ed30caf449087563391e05c6b84e196dd08a33b131ae444b5"
+    },
+    {
+      "name": "Aptos.ttf",
+      "sha256": "95980114fcfd42f2f9c446dae429b70582bf2f03097d68433ea9e7d85a49da0b"
+    },
+    {
+      "name": "AptosDisplay-Bold.ttf",
+      "sha256": "e66a3774f5c9f2799f1a7f4734f5d1ad942cc9aeb173eb2c94bc09a5f1bf1142"
+    },
+    {
+      "name": "AptosDisplay-BoldItalic.ttf",
+      "sha256": "67efa2915e860d32365f01fae22400a0ab5a36d7942dd2024dd210910894f0f2"
+    },
+    {
+      "name": "AptosDisplay-Regular.ttf",
+      "sha256": "af7a83e6f1d18b62535a8ee97939ab8653d5ac1fe1861cdb8fce829d3878d901"
+    },
+    {
+      "name": "Arial-Bold.ttf",
+      "sha256": "b018b20bd6392de9ad3c5f0a1dcd23ad1fdf94227652fd92541521c32d8e5fc1"
+    },
+    {
+      "name": "Arial-BoldItalic.ttf",
+      "sha256": "399f00fe9cca7136639df72e976914c3713cbb321374e52def9ab5a10815904e"
+    },
+    {
+      "name": "Arial-Italic.ttf",
+      "sha256": "541466c87057d2f665fe190ec1e8011c82326ef9aaae0c318244db88b1ee63f5"
+    },
+    {
+      "name": "Arial.ttf",
+      "sha256": "15663c7e8495594c6136eb51b11983eb8f5bbcdd07bb2c327e0d1e83415b0f06"
+    },
+    {
+      "name": "Calibri-Bold.ttf",
+      "sha256": "ac1cf97565de97cdc322228d875dc18c1131656c5138173e2c6d8ac7a37aa7f2"
+    },
+    {
+      "name": "Calibri-BoldItalic.ttf",
+      "sha256": "77117338878fefc82770d27303bcca90e900f2ef59a0a87d294b7744ec158b5b"
+    },
+    {
+      "name": "Calibri-Italic.ttf",
+      "sha256": "38e28b619448710314a298dd66305a3b8f494a854f19d40aa18b9872e61911fe"
+    },
+    {
+      "name": "Calibri.ttf",
+      "sha256": "ea801e1f869b55464339058b1d4263d07cc074a18e20aa3ee1d07901423dee53"
+    }
+  ],
+  "cases": [
+    {
+      "case": "001-basic-shapes",
+      "input_sha256": "bd2cad631d588fee1977d2a1a4b8d7a84d6a2c0c74b0a41b3e396f1e794cbac1",
+      "before": {
+        "overall_difference": 0.019182610409561332,
+        "rating": "MINOR_DIFFERENCE",
+        "warnings": 338,
+        "slides": [
+          {
+            "slide": 1,
+            "difference": 0.020828237670597303,
+            "worst_block_difference": 0.4542546120228731,
+            "rating": "MINOR_DIFFERENCE"
+          },
+          {
+            "slide": 2,
+            "difference": 0.017536983148525365,
+            "worst_block_difference": 0.45806727149387255,
+            "rating": "MINOR_DIFFERENCE"
+          }
+        ]
+      },
+      "after": {
+        "overall_difference": 0.019182610409561332,
+        "rating": "MINOR_DIFFERENCE",
+        "warnings": 338,
+        "slides": [
+          {
+            "slide": 1,
+            "difference": 0.020828237670597303,
+            "worst_block_difference": 0.4542546120228731,
+            "rating": "MINOR_DIFFERENCE"
+          },
+          {
+            "slide": 2,
+            "difference": 0.017536983148525365,
+            "worst_block_difference": 0.45806727149387255,
+            "rating": "MINOR_DIFFERENCE"
+          }
+        ]
+      },
+      "font_resolutions": [
+        {
+          "requested_family": "Aptos",
+          "requested_weight": 700,
+          "requested_italic": false,
+          "resolved_family": "Aptos",
+          "resolved_subfamily": "Bold",
+          "resolved_weight": 700,
+          "resolved_italic": false,
+          "full_name": "Aptos Bold",
+          "postscript_name": "Aptos-Bold"
+        },
+        {
+          "requested_family": "Aptos",
+          "requested_weight": 400,
+          "requested_italic": false,
+          "resolved_family": "Aptos",
+          "resolved_subfamily": "Regular",
+          "resolved_weight": 400,
+          "resolved_italic": false,
+          "full_name": "Aptos",
+          "postscript_name": "Aptos"
+        }
+      ],
+      "paired_reference_source_sha256": "bd2cad631d588fee1977d2a1a4b8d7a84d6a2c0c74b0a41b3e396f1e794cbac1"
+    },
+    {
+      "case": "002-images",
+      "input_sha256": "6f4c82403bca3358ceb62b2bd2631e36fdead8c5cf73d0a8981f755233062314",
+      "before": {
+        "overall_difference": 0.015889994520986585,
+        "rating": "MINOR_DIFFERENCE",
+        "warnings": 271,
+        "slides": [
+          {
+            "slide": 1,
+            "difference": 0.016548268670571135,
+            "worst_block_difference": 0.3938965887338994,
+            "rating": "MINOR_DIFFERENCE"
+          },
+          {
+            "slide": 2,
+            "difference": 0.015231720371402035,
+            "worst_block_difference": 0.3732780446915358,
+            "rating": "MINOR_DIFFERENCE"
+          }
+        ]
+      },
+      "after": {
+        "overall_difference": 0.015889994520986585,
+        "rating": "MINOR_DIFFERENCE",
+        "warnings": 271,
+        "slides": [
+          {
+            "slide": 1,
+            "difference": 0.016548268670571135,
+            "worst_block_difference": 0.3938965887338994,
+            "rating": "MINOR_DIFFERENCE"
+          },
+          {
+            "slide": 2,
+            "difference": 0.015231720371402035,
+            "worst_block_difference": 0.3732780446915358,
+            "rating": "MINOR_DIFFERENCE"
+          }
+        ]
+      },
+      "font_resolutions": [
+        {
+          "requested_family": "Aptos",
+          "requested_weight": 700,
+          "requested_italic": false,
+          "resolved_family": "Aptos",
+          "resolved_subfamily": "Bold",
+          "resolved_weight": 700,
+          "resolved_italic": false,
+          "full_name": "Aptos Bold",
+          "postscript_name": "Aptos-Bold"
+        },
+        {
+          "requested_family": "Aptos",
+          "requested_weight": 400,
+          "requested_italic": false,
+          "resolved_family": "Aptos",
+          "resolved_subfamily": "Regular",
+          "resolved_weight": 400,
+          "resolved_italic": false,
+          "full_name": "Aptos",
+          "postscript_name": "Aptos"
+        }
+      ],
+      "paired_reference_source_sha256": "6f4c82403bca3358ceb62b2bd2631e36fdead8c5cf73d0a8981f755233062314"
+    },
+    {
+      "case": "003-text",
+      "input_sha256": "f327d67116a6c383ce3ed3787db2a94065a515f7d49f7c76a8240577a338e619",
+      "before": {
+        "overall_difference": 0.024041569263284428,
+        "rating": "MINOR_DIFFERENCE",
+        "warnings": 320,
+        "slides": [
+          {
+            "slide": 1,
+            "difference": 0.025578169674754105,
+            "worst_block_difference": 0.46792571261973104,
+            "rating": "MINOR_DIFFERENCE"
+          },
+          {
+            "slide": 2,
+            "difference": 0.02250496885181475,
+            "worst_block_difference": 0.3938297981737806,
+            "rating": "MINOR_DIFFERENCE"
+          }
+        ]
+      },
+      "after": {
+        "overall_difference": 0.024041569263284428,
+        "rating": "MINOR_DIFFERENCE",
+        "warnings": 320,
+        "slides": [
+          {
+            "slide": 1,
+            "difference": 0.025578169674754105,
+            "worst_block_difference": 0.46792571261973104,
+            "rating": "MINOR_DIFFERENCE"
+          },
+          {
+            "slide": 2,
+            "difference": 0.02250496885181475,
+            "worst_block_difference": 0.3938297981737806,
+            "rating": "MINOR_DIFFERENCE"
+          }
+        ]
+      },
+      "font_resolutions": [
+        {
+          "requested_family": "Aptos",
+          "requested_weight": 700,
+          "requested_italic": false,
+          "resolved_family": "Aptos",
+          "resolved_subfamily": "Bold",
+          "resolved_weight": 700,
+          "resolved_italic": false,
+          "full_name": "Aptos Bold",
+          "postscript_name": "Aptos-Bold"
+        },
+        {
+          "requested_family": "Aptos",
+          "requested_weight": 400,
+          "requested_italic": false,
+          "resolved_family": "Aptos",
+          "resolved_subfamily": "Regular",
+          "resolved_weight": 400,
+          "resolved_italic": false,
+          "full_name": "Aptos",
+          "postscript_name": "Aptos"
+        }
+      ],
+      "paired_reference_source_sha256": "f327d67116a6c383ce3ed3787db2a94065a515f7d49f7c76a8240577a338e619"
+    },
+    {
+      "case": "004-theme-layout",
+      "input_sha256": "a77cd7a020dc42352ea1a049053424878356dbf8d4fed7bea5a595853c4f5b17",
+      "before": {
+        "overall_difference": 0.033928423960757646,
+        "rating": "MAJOR_DIFFERENCE",
+        "warnings": 299,
+        "slides": [
+          {
+            "slide": 1,
+            "difference": 0.012996057842423863,
+            "worst_block_difference": 0.4707269883228538,
+            "rating": "MINOR_DIFFERENCE"
+          },
+          {
+            "slide": 2,
+            "difference": 0.05486079007909143,
+            "worst_block_difference": 0.892813926587937,
+            "rating": "MAJOR_DIFFERENCE"
+          }
+        ]
+      },
+      "after": {
+        "overall_difference": 0.030199395815362552,
+        "rating": "MAJOR_DIFFERENCE",
+        "warnings": 297,
+        "slides": [
+          {
+            "slide": 1,
+            "difference": 0.012996057842423863,
+            "worst_block_difference": 0.4707269883228538,
+            "rating": "MINOR_DIFFERENCE"
+          },
+          {
+            "slide": 2,
+            "difference": 0.04740273378830124,
+            "worst_block_difference": 0.755559818049309,
+            "rating": "MAJOR_DIFFERENCE"
+          }
+        ]
+      },
+      "font_resolutions": [
+        {
+          "requested_family": "Aptos",
+          "requested_weight": 700,
+          "requested_italic": false,
+          "resolved_family": "Aptos",
+          "resolved_subfamily": "Bold",
+          "resolved_weight": 700,
+          "resolved_italic": false,
+          "full_name": "Aptos Bold",
+          "postscript_name": "Aptos-Bold"
+        },
+        {
+          "requested_family": "Aptos",
+          "requested_weight": 400,
+          "requested_italic": false,
+          "resolved_family": "Aptos",
+          "resolved_subfamily": "Regular",
+          "resolved_weight": 400,
+          "resolved_italic": false,
+          "full_name": "Aptos",
+          "postscript_name": "Aptos"
+        },
+        {
+          "requested_family": "Aptos Display",
+          "requested_weight": 400,
+          "requested_italic": false,
+          "resolved_family": "Aptos Display",
+          "resolved_subfamily": "Regular",
+          "resolved_weight": 400,
+          "resolved_italic": false,
+          "full_name": "Aptos Display",
+          "postscript_name": "AptosDisplay"
+        },
+        {
+          "requested_family": "Arial",
+          "requested_weight": 400,
+          "requested_italic": false,
+          "resolved_family": "Arial",
+          "resolved_subfamily": "Regular",
+          "resolved_weight": 400,
+          "resolved_italic": false,
+          "full_name": "Arial",
+          "postscript_name": "ArialMT"
+        }
+      ],
+      "paired_reference_source_sha256": "a77cd7a020dc42352ea1a049053424878356dbf8d4fed7bea5a595853c4f5b17"
+    },
+    {
+      "case": "005-transforms",
+      "input_sha256": "a918e006415a58b2c3809bf2d4be3fe01f4ed71192cea29db5b8d4b72fb7f94d",
+      "before": {
+        "overall_difference": 0.01433036521594186,
+        "rating": "MINOR_DIFFERENCE",
+        "warnings": 314,
+        "slides": [
+          {
+            "slide": 1,
+            "difference": 0.012356903274901623,
+            "worst_block_difference": 0.37117162652159996,
+            "rating": "MINOR_DIFFERENCE"
+          },
+          {
+            "slide": 2,
+            "difference": 0.016303827156982097,
+            "worst_block_difference": 0.3388324377211964,
+            "rating": "MINOR_DIFFERENCE"
+          }
+        ]
+      },
+      "after": {
+        "overall_difference": 0.01433036521594186,
+        "rating": "MINOR_DIFFERENCE",
+        "warnings": 314,
+        "slides": [
+          {
+            "slide": 1,
+            "difference": 0.012356903274901623,
+            "worst_block_difference": 0.37117162652159996,
+            "rating": "MINOR_DIFFERENCE"
+          },
+          {
+            "slide": 2,
+            "difference": 0.016303827156982097,
+            "worst_block_difference": 0.3388324377211964,
+            "rating": "MINOR_DIFFERENCE"
+          }
+        ]
+      },
+      "font_resolutions": [
+        {
+          "requested_family": "Aptos",
+          "requested_weight": 700,
+          "requested_italic": false,
+          "resolved_family": "Aptos",
+          "resolved_subfamily": "Bold",
+          "resolved_weight": 700,
+          "resolved_italic": false,
+          "full_name": "Aptos Bold",
+          "postscript_name": "Aptos-Bold"
+        },
+        {
+          "requested_family": "Aptos",
+          "requested_weight": 400,
+          "requested_italic": false,
+          "resolved_family": "Aptos",
+          "resolved_subfamily": "Regular",
+          "resolved_weight": 400,
+          "resolved_italic": false,
+          "full_name": "Aptos",
+          "postscript_name": "Aptos"
+        }
+      ],
+      "paired_reference_source_sha256": "a918e006415a58b2c3809bf2d4be3fe01f4ed71192cea29db5b8d4b72fb7f94d"
+    },
+    {
+      "case": "006-style-matrix",
+      "input_sha256": "bfc9a0f105debf7c49e6b2aa6590e981b7418471ba7341891026b5da184998bc",
+      "before": {
+        "overall_difference": 0.012036478979696053,
+        "rating": "MINOR_DIFFERENCE",
+        "warnings": 325,
+        "slides": [
+          {
+            "slide": 1,
+            "difference": 0.014194471183480523,
+            "worst_block_difference": 0.3668475790777103,
+            "rating": "MINOR_DIFFERENCE"
+          },
+          {
+            "slide": 2,
+            "difference": 0.009878486775911586,
+            "worst_block_difference": 0.38730880865890355,
+            "rating": "MINOR_DIFFERENCE"
+          }
+        ]
+      },
+      "after": {
+        "overall_difference": 0.012036478979696053,
+        "rating": "MINOR_DIFFERENCE",
+        "warnings": 325,
+        "slides": [
+          {
+            "slide": 1,
+            "difference": 0.014194471183480523,
+            "worst_block_difference": 0.3668475790777103,
+            "rating": "MINOR_DIFFERENCE"
+          },
+          {
+            "slide": 2,
+            "difference": 0.009878486775911586,
+            "worst_block_difference": 0.38730880865890355,
+            "rating": "MINOR_DIFFERENCE"
+          }
+        ]
+      },
+      "font_resolutions": [
+        {
+          "requested_family": "Aptos",
+          "requested_weight": 700,
+          "requested_italic": false,
+          "resolved_family": "Aptos",
+          "resolved_subfamily": "Bold",
+          "resolved_weight": 700,
+          "resolved_italic": false,
+          "full_name": "Aptos Bold",
+          "postscript_name": "Aptos-Bold"
+        },
+        {
+          "requested_family": "Aptos",
+          "requested_weight": 400,
+          "requested_italic": false,
+          "resolved_family": "Aptos",
+          "resolved_subfamily": "Regular",
+          "resolved_weight": 400,
+          "resolved_italic": false,
+          "full_name": "Aptos",
+          "postscript_name": "Aptos"
+        }
+      ],
+      "paired_reference_source_sha256": "bfc9a0f105debf7c49e6b2aa6590e981b7418471ba7341891026b5da184998bc"
+    }
+  ],
+  "integrity": {
+    "files": 196,
+    "unchanged": true,
+    "scope": [
+      "compat/corpus/public",
+      "compat/references/local",
+      "fixtures"
+    ]
+  },
+  "title_dark_ink_bounds_native_px": {
+    "reference": [
+      185,
+      103,
+      1257,
+      176
+    ],
+    "before": [
+      147,
+      110,
+      1295,
+      183
+    ],
+    "after": [
+      184,
+      110,
+      1258,
+      183
+    ]
+  },
+  "validation": {
+    "rust_tests": 355,
+    "compatibility_tests": 27,
+    "clippy": "pass",
+    "fmt": "pass"
+  },
+  "target_met": false,
+  "adapters": {
+    "before": {
+      "sha256": "7f6a6e6e389fa7c083614639ad1aed6cc21505a09f91f1af13fce74d28f5994b"
+    },
+    "after": {
+      "sha256": "c2f6a17294dc0b23cca23930fbbad38c2b81c5c7265a318ccf6e60d1f814c6cc"
+    }
+  }
+}
