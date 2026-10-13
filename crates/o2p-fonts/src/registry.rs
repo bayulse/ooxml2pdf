@@ -8,6 +8,37 @@ pub const MAX_GLYPHS: usize = 262_144;
 const MAX_FONTS: usize = 256;
 const MAX_TOTAL_BYTES: usize = 64 * 1024 * 1024;
 
+/// Classify table records, independently of parsing/validating their contents.
+/// Callers must still validate every required outline/metrics/permissions table.
+fn validate_technology(has_table: impl Fn(&[u8; 4]) -> bool) -> Result<(), FontError> {
+    for (tag, technology) in [
+        (b"CFF ", "CFF"),
+        (b"CFF2", "CFF2"),
+        (b"fvar", "variable font"),
+        (b"COLR", "color font"),
+        (b"CPAL", "color font"),
+        (b"SVG ", "SVG font"),
+    ] {
+        if has_table(tag) {
+            return Err(FontError::UnsupportedTechnology(technology));
+        }
+    }
+    // A supported outline candidate takes precedence over auxiliary strikes.
+    // This does not validate the outlines or enable bitmap glyph rendering.
+    if has_table(b"glyf") && has_table(b"loca") {
+        return Ok(());
+    }
+    if [
+        b"CBDT", b"CBLC", b"EBDT", b"EBLC", b"bdat", b"bloc", b"sbix",
+    ]
+    .into_iter()
+    .any(has_table)
+    {
+        return Err(FontError::UnsupportedTechnology("bitmap font"));
+    }
+    Err(FontError::InvalidFont)
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum FontError {
     InvalidFont,
@@ -92,31 +123,12 @@ impl FontFace {
         }
         let face = ttf_parser::Face::parse(bytes, 0).map_err(|_| FontError::InvalidFont)?;
         let raw = face.raw_face();
-        for (tag, technology) in [
-            (*b"CFF ", "CFF"),
-            (*b"CFF2", "CFF2"),
-            (*b"fvar", "variable font"),
-            (*b"COLR", "color font"),
-            (*b"CPAL", "color font"),
-            (*b"SVG ", "SVG font"),
-            (*b"CBDT", "bitmap font"),
-            (*b"CBLC", "bitmap font"),
-            (*b"EBDT", "bitmap font"),
-            (*b"EBLC", "bitmap font"),
-            (*b"bdat", "bitmap font"),
-            (*b"bloc", "bitmap font"),
-            (*b"sbix", "bitmap font"),
-        ] {
-            // Check records as well as parsed tables: malformed optional tables
-            // must not accidentally turn unsupported fonts into supported ones.
-            if raw
-                .table_records
+        // Inspect records even when optional table contents are malformed.
+        validate_technology(|tag| {
+            raw.table_records
                 .into_iter()
-                .any(|r| r.tag == ttf_parser::Tag::from_bytes(&tag))
-            {
-                return Err(FontError::UnsupportedTechnology(technology));
-            }
-        }
+                .any(|r| r.tag == ttf_parser::Tag::from_bytes(tag))
+        })?;
         for tag in [
             b"glyf", b"loca", b"head", b"hhea", b"hmtx", b"maxp", b"cmap", b"name", b"OS/2",
         ] {
@@ -369,5 +381,69 @@ impl FontResolver for FontBook {
             }
         }
         Ok(FontSelection { font, warnings })
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn classify(tags: &[&[u8; 4]]) -> Result<(), FontError> {
+        validate_technology(|tag| tags.contains(&tag))
+    }
+
+    #[test]
+    fn scalable_outlines_take_precedence_over_auxiliary_bitmap_tables() {
+        assert_eq!(classify(&[b"glyf", b"loca"]), Ok(()));
+        for bitmap in [
+            &[b"EBDT", b"EBLC"][..],
+            &[b"CBDT", b"CBLC"][..],
+            &[b"sbix"][..],
+            &[b"bdat", b"bloc"][..],
+        ] {
+            let mut tags = vec![b"glyf", b"loca"];
+            tags.extend_from_slice(bitmap);
+            assert_eq!(classify(&tags), Ok(()), "{tags:?}");
+        }
+    }
+
+    #[test]
+    fn bitmap_only_and_incomplete_outline_technologies_remain_rejected() {
+        for bitmap in [
+            &[b"EBDT", b"EBLC"][..],
+            &[b"CBDT", b"CBLC"][..],
+            &[b"sbix"][..],
+            &[b"bdat", b"bloc"][..],
+        ] {
+            assert_eq!(
+                classify(bitmap),
+                Err(FontError::UnsupportedTechnology("bitmap font"))
+            );
+            for outline in [b"glyf", b"loca"] {
+                let mut tags = bitmap.to_vec();
+                tags.push(outline);
+                assert!(classify(&tags).is_err(), "{tags:?}");
+            }
+        }
+        for tags in [&[][..], &[b"glyf"][..], &[b"loca"][..], &[b"head"][..]] {
+            assert_eq!(classify(tags), Err(FontError::InvalidFont));
+        }
+    }
+
+    #[test]
+    fn unsupported_technologies_still_override_outline_table_presence() {
+        for (tag, technology) in [
+            (b"CFF ", "CFF"),
+            (b"CFF2", "CFF2"),
+            (b"fvar", "variable font"),
+            (b"COLR", "color font"),
+            (b"CPAL", "color font"),
+            (b"SVG ", "SVG font"),
+        ] {
+            assert_eq!(
+                classify(&[b"glyf", b"loca", b"EBDT", b"EBLC", tag]),
+                Err(FontError::UnsupportedTechnology(technology))
+            );
+        }
     }
 }

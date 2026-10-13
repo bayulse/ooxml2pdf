@@ -252,12 +252,22 @@ claim. Runtime remains platform-neutral Rust; Android/iOS cross-build validation
 is deferred. Fixtures are approximately 361 KiB and never linked into binaries.
 
 Supported: standalone static sfnt TrueType, including OpenType containers with
-`glyf` outlines. CFF/CFF2, variable `fvar`, color COLR/CPAL/SVG, embedded bitmap
-CBDT/CBLC/EBDT/EBLC/bdat/bloc/sbix, collections, WOFF/WOFF2 and invalid fonts are
-rejected with structured errors. Extensions absent from the supported path are
-not silently flattened into outlines or a default face.
+usable `glyf` + `loca` scalable outlines. All required tables, parsed outline and
+metrics data, and embedding permissions must pass the existing validity checks.
+Fonts may also contain auxiliary bitmap strike tables: EBDT/EBLC, CBDT/CBLC,
+bdat/bloc or sbix. These tables do not invalidate otherwise usable TrueType
+outlines; the converter uses the outlines and does not render bitmap strikes.
+The complete font program is still embedded, without stripping auxiliary tables.
 
-Hard limits: 16 MiB per font, 64 MiB registered/embedded font bytes, 256 fonts,
+Bitmap-only fonts with no supported scalable outlines remain unsupported and
+return `UnsupportedTechnology("bitmap font")`. CFF/CFF2, variable `fvar`, color
+COLR/CPAL/SVG, collections, WOFF/WOFF2 and invalid fonts remain rejected with
+structured errors, even if auxiliary bitmap tables or outline table records are
+present. Table presence alone never bypasses outline validation or permissions.
+
+Hard limits remain enforced: 16 MiB per font, 64 MiB registered/embedded font
+bytes, 256 registered fonts and 256 candidate font files per directory scan
+(`LimitExceeded("directory fonts")`),
 16,000 UTF-8 bytes per semantic shaping operation, 262,144 output glyphs per
 operation, 256 UTF-16 units per PDF source cluster, and 65,535 CIDs per PDF font.
 Text/cluster limits keep PDF text-string and ToUnicode string lengths valid.

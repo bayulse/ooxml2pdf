@@ -346,3 +346,19 @@ worst block, per-case overall/rating, total and typography warnings, native imag
 inspection, exact commands and local artifacts. [FIDELITY_2C.json](../compat/reports/FIDELITY_2C.json)
 retains full-precision comparative measurements. Autofit remains deferred;
 [TYPOGRAPHY.md](TYPOGRAPHY.md) describes implemented semantics and corpus usage.
+
+## Scalable fonts with auxiliary bitmap strikes
+
+PowerPoint for Mac's Calibri.ttf contains usable TrueType glyf/loca outlines
+alongside EBDT/EBLC bitmap strikes. Font registration now accepts those outlines
+under the existing validation/permissions/resource checks; bitmap-only fonts and
+bitmap rendering remain unsupported. This is a generic table-classification fix,
+with no Office-specific discovery, substitution or layout heuristic.
+
+[FONT_COMPATIBILITY.md](../compat/reports/FONT_COMPATIBILITY.md) records local
+validation of all four Calibri faces and the correctly paired 001-basic-shapes
+comparison using only explicit Calibri regular/bold and Aptos regular/bold.
+Overall difference improves from 0.0358493 to 0.0191826, worst block from
+0.8319985 to 0.4580673, and the case rating from MAJOR_DIFFERENCE to
+MINOR_DIFFERENCE. Fixture-font metrics reproduce the Fidelity 2C baseline exactly;
+inputs, references, DPI and thresholds remain unchanged.

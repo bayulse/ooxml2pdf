@@ -910,8 +910,10 @@ HarfRust 0.14.0 (MIT) is the focused maintained pure-Rust shaper; ttf-parser 0.2
 script and grapheme helpers support deterministic segmentation. All versions
 fit Rust 1.85. No system discovery, fontconfig, rasterizer, native service, cloud
 or process dependency is introduced. Static standalone TrueType/glyf is the
-supported embedding path; CFF/CFF2, variable, color, bitmap and collection fonts
-return structured errors. Font and text workloads have explicit ceilings.
+supported embedding path; auxiliary bitmap strikes do not invalidate usable
+`glyf`/`loca` outlines and are not rendered. CFF/CFF2, variable, COLR/CPAL/SVG,
+bitmap-only and collection fonts return structured errors. Font and text
+workloads retain their explicit ceilings. See FONTS.md for the current policy.
 
 See [FONTS.md](FONTS.md) for ownership, matching policy, dependency/license
 comparison, security limits, Unicode/extraction strategy and precise limitations.
